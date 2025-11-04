@@ -35,6 +35,14 @@
 #define IPIER_BTN (*(volatile unsigned int*)(GPIO_BTN_BASE + 0x0128))
 #define IPISR_BTN (*(volatile unsigned int*)(GPIO_BTN_BASE + 0x0120))
 
+static void to_bin4(unsigned int value, char out[5])
+{
+    for (int bit = 3; bit >= 0; --bit) {
+        out[3 - bit] = (value & (1u << bit)) ? '1' : '0';
+    }
+    out[4] = '\0';
+}
+
 void myISR(void) __attribute__((interrupt_handler));
 
 int main(void)
@@ -62,12 +70,26 @@ void myISR(void)
     // --- SW interrupt
     if (pending & 0x1) {
         unsigned int sw = *((volatile unsigned int*)(GPIO_SW_BASE));
-        unsigned int pattern=0;
-        for(int i=3;i>=0;i--){
-            if(sw & (1<<i)){ pattern=(1<<i); break; }
+        int msb_index = -1;
+        for (int i = 3; i >= 0; --i) {
+            if (sw & (1u << i)) {
+                msb_index = i;
+                break;
+            }
         }
+
+        unsigned int pattern = (msb_index < 0) ? 0u : (unsigned int)msb_index;
         *((volatile unsigned int*)(GPIO_LED_BASE)) = pattern;
-        xil_printf("[SW IRQ] SW=%04b -> LED=%04b\r\n", sw, pattern);
+
+        char sw_str[5];
+        char led_str[5];
+        to_bin4(sw, sw_str);
+        to_bin4(pattern, led_str);
+        if (msb_index < 0) {
+            xil_printf("[SW IRQ] SW=%s -> LED=%s (index=none)\r\n", sw_str, led_str);
+        } else {
+            xil_printf("[SW IRQ] SW=%s -> LED=%s (index=%d)\r\n", sw_str, led_str, msb_index);
+        }
         IPISR_SW=0x1; IIAR=0x1;
     }
 
@@ -77,7 +99,10 @@ void myISR(void)
         unsigned int led = *((volatile unsigned int*)(GPIO_LED_BASE));
         unsigned int inv = (~led)&0xF;
         *((volatile unsigned int*)(GPIO_LED_BASE)) = inv;
-        xil_printf("[BTN IRQ] Invert LED -> %04b\r\n", inv);
+
+        char inv_str[5];
+        to_bin4(inv, inv_str);
+        xil_printf("[BTN IRQ] Invert LED -> %s\r\n", inv_str);
         IPISR_BTN=0x1; IIAR=0x2;
     }
 }
