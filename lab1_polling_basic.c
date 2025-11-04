@@ -34,8 +34,17 @@ int main(void)
     while (1) {
         unsigned int sw_value = *((volatile unsigned int*)(GPIO_SW_BASE));
         if (sw_value != last_value) { // update only on change
+            char sw_str[5] = {0};
+            char led_str[5] = {0};
+
             *((volatile unsigned int*)(GPIO_LED_BASE)) = sw_value;
-            xil_printf("SW=%04b -> LED=%04b\r\n", sw_value, sw_value);
+
+            for (int bit = 3; bit >= 0; --bit) {
+                sw_str[3 - bit]  = (sw_value & (1u << bit)) ? '1' : '0';
+                led_str[3 - bit] = (sw_value & (1u << bit)) ? '1' : '0';
+            }
+
+            xil_printf("SW=%s -> LED=%s\r\n", sw_str, led_str);
             last_value = sw_value;
         }
     }
