@@ -30,6 +30,7 @@
 #include "xil_printf.h"
 #include "sleep.h"
 
+
 /* ============================================================
  *  BASE ADDRESSES (from Vivado hardware design)
  *  Each AXI GPIO has two channels:
@@ -87,8 +88,9 @@ int main(void)
      * - UART (for xil_printf)
      * - caches and basic peripherals
      */
-        init_platform();
+    init_platform();
     xil_printf("\r\n[Lab1 - Interrupt v2] Add + Invert logic\r\n");
+
 
     /* ------------------------------------------------------------
      *  Configure GPIO directions

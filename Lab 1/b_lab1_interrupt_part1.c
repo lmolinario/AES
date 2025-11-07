@@ -28,6 +28,7 @@
 #include "platform.h"
 #include "xil_printf.h"
 #include "sleep.h"
+#include "xil_exception.h"
 
 /* ============================================================
  *  BASE ADDRESSES (from Vivado hardware design)
@@ -86,6 +87,15 @@ int main(void)
     init_platform();
     xil_printf("\r\n[Lab1 - Interrupt v1] MSB index + Invert logic\r\n");
 
+
+    /* === Register ISR globally for MicroBlaze === */
+    Xil_ExceptionInit();
+    Xil_ExceptionRegisterHandler(
+        XIL_EXCEPTION_ID_INT,
+        (Xil_ExceptionHandler)myISR,
+        NULL
+    );
+    Xil_ExceptionEnable();
     /* ------------------------------------------------------------
      *  Configure GPIO directions
      *  TRI = 1 → input
@@ -116,6 +126,8 @@ int main(void)
     microblaze_enable_interrupts(); // Enable interrupts globally in CPU
 
     xil_printf("[System] Interrupt controller configured. Waiting for events...\r\n");
+
+
 
     /* Idle main loop — ISR handles everything asynchronously */
     while (1);
