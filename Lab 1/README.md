@@ -31,7 +31,7 @@ Registers used:
 
 ## 🧩 Implementations
 
-### 🔹 (a) `lab1_polling_basic.c`
+### 🔹 (a) `a_lab1_polling_basic.c`
 **Description:**  
 Polling-based version. Continuously reads the 4 switches and mirrors their binary value directly on the LEDs.
 
@@ -46,7 +46,7 @@ SW = 0101 → LED = 0101
 
 ---
 
-### 🔹 (b) `lab1_interrupt_part1.c`
+### 🔹 (b) `b_lab1_interrupt_part1.c`
 **Description:**  
 Interrupt-based version (Part 1) using two sources — Switches and Buttons — through the AXI Interrupt Controller.
 
@@ -62,7 +62,7 @@ BTN pressed → invert → LED = 1101
 
 ---
 
-### 🔹 (c) `lab1_interrupt_part2.c`
+### 🔹 (c) `c_lab1_interrupt_part2.c`
 **Description:**  
 Extended interrupt version. Similar to part (b) but modifies the **button ISR** to include arithmetic logic.
 
