@@ -4,26 +4,26 @@
 **Course:** Advanced Embedded Systems (A.Y. 2025)  
 **Instructor:** Prof. Paolo Meloni  
 **Board:** Zybo Z7 / MicroBlaze  
-**Language:** C  
+**Language:** C
 
 ---
 
 ## 🧩 Contents
 | Lab | Title | Description |
 |-----|--------|-------------|
-| **Lab 1** | Polling & Interrupts | Polling version + Interrupt version with ISR |
+| **Lab 1** | Polling & Interrupts | (a) `lab1_polling_basic.c` – read switches and mirror on LEDs • (b) `lab1_interrupt_part1.c` – SW + BTN interrupt handling with AXI Interrupt Controller • (c) `lab1_interrupt_part2.c` – advanced BTN ISR adding student ID digit + invert pattern |
 
 ---
 
 ### 📁 Repository Structure
 Each lab folder contains:
-- `*.c` source code  
-- `README.md` describing functionality, hardware mapping, and test notes  
+- `*.c` source code
+- `README.md` describing functionality, hardware mapping and test notes
 
 ---
 
 ### 🧠 Notes
-This repository collects all lab assignments developed for the **Advanced Embedded Systems** course at the University of Cagliari.  
+This repository collects all laboratory assignments developed for the **Advanced Embedded Systems** course at the *University of Cagliari*.  
 
 ---
 
