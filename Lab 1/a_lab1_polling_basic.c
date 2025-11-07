@@ -37,19 +37,26 @@ static void UpdateLeds(unsigned int sw_value);
  * ============================================================ */
 int main(void)
 {
+
+
     /* --- Initialize platform (UART, caches, etc.) --- */
     init_platform();
-    xil_printf("\r\n[Lab1 - Polling Basic] LED mirrors switch state\r\n");
+    xil_printf("\r\n[Lab1 - Polling Basic] Mirroring 4-bit switches on LEDs\r\n");
 
     /* --- Configure GPIO directions and clear LEDs --- */
     GpioInit();
 
     unsigned int last_value = 0x0;   // store previous switch state
 
-    /* --- Main polling loop --- */
+    /* --- Main polling loop ---
+     * Continuously reads switch input and updates LEDs accordingly.
+     * To reduce UART spam and CPU usage, updates occur only on state change.
+     * No delay inserted: continuous polling for educational measurement
+     */
     while (1) {
         /* Read the 4-bit switch value (mask lower nibble) */
-        unsigned int sw_value = *((volatile unsigned int*)(GPIO_SW_BASE)) & 0xF;
+
+        unsigned int sw_value = *((volatile unsigned int*)(GPIO_SW_BASE)) & 0xF; ///Read from memory-mapped GPIO register (volatile prevents compiler optimization)
 
         /* Update only when a change is detected */
         if (sw_value != last_value) {
