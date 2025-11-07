@@ -57,7 +57,7 @@
 #define IPISR_BTN (*(volatile unsigned int*)(GPIO_BTN_BASE + 0x0120U))
 
 /* Last digit of Student ID (used in BTN interrupt arithmetic) */
-#define STUDENT_ID_DIGIT 9U
+#define STUDENT_ID_DIGIT 9U // My Student ID: 70/90/000369 ---> 9
 
 /* ============================================================
  *  FUNCTION PROTOTYPES
