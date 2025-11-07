@@ -8,24 +8,24 @@
 
 ---
 
-## 🧩 Contents
+##  Contents
 | Lab | Title | Description |
 |-----|--------|-------------|
-| **Lab 1** | Polling & Interrupts | (a) `lab1_polling_basic.c` – read switches and mirror on LEDs • (b) `lab1_interrupt_part1.c` – SW + BTN interrupt handling with AXI Interrupt Controller • (c) `lab1_interrupt_part2.c` – advanced BTN ISR adding student ID digit + invert pattern |
+| **Lab 1** | Polling & Interrupts | (a) `a_lab1_polling_basic.c` – read switches and mirror on LEDs • (b) `b_lab1_interrupt_part1.c` – SW + BTN interrupt handling with AXI Interrupt Controller • (c) `c_lab1_interrupt_part2.c` – advanced BTN ISR adding student ID digit + invert pattern |
 
 ---
 
-### 📁 Repository Structure
+###  Repository Structure
 Each lab folder contains:
 - `*.c` source code
 - `README.md` describing functionality, hardware mapping and test notes
 
 ---
 
-### 🧠 Notes
+###  Notes
 This repository collects all laboratory assignments developed for the **Advanced Embedded Systems** course at the *University of Cagliari*.  
 
 ---
 
-📅 *Academic Year 2025 – University of Cagliari*  
-🧑‍💻 *Repository maintained by Lello Molinario*
+*Academic Year 2025 – University of Cagliari*  
+*Repository maintained by Lello Molinario*
