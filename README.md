@@ -9,9 +9,9 @@
 ---
 
 ##  Contents
-| Lab | Title | Description |
-|-----|--------|-------------|
-| **Lab 1** | Polling & Interrupts | (a) `a_lab1_polling_basic.c` – read switches and mirror on LEDs • (b) `b_lab1_interrupt_part1.c` – SW + BTN interrupt handling with AXI Interrupt Controller • (c) `c_lab1_interrupt_part2.c` – advanced BTN ISR adding student ID digit + invert pattern |
+| Lab | Title | Description                                                                                                                                                                                                                                                           |
+|-----|--------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Lab 1** | Polling & Interrupts | **(a)** `a_lab1_polling_basic.c` – read switches and mirror on LEDs • **(b)** `b_lab1_interrupt_part1.c` – SW + BTN interrupt handling with AXI Interrupt Controller • **(c)** `c_lab1_interrupt_part2.c` – advanced BTN ISR adding student ID digit + invert pattern |
 
 ---
 
