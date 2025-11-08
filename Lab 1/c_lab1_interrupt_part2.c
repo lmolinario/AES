@@ -22,7 +22,7 @@
  *         3) inverts (~) the result and keeps only 4 bits.
  *
  *  Example behaviour:
- *      LED = 0010 (2)
+ *  	SW=0100 → LED=0010 (MSB=2)
  *      BTN: (2 + 9) = 11 = 0b1011
  *           ~1011 = ...0100 → 0100 (masked to 4 bits)
  *
