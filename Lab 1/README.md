@@ -1,18 +1,5 @@
 # Lab 1 – Polling & Interrupts
 
-**Course:** Advanced Embedded Systems (University of Cagliari)  
-**Instructor:** Prof. Paolo Meloni  
-**Author:** Lello Molinario  
-**Board:** Zybo Z7 / MicroBlaze  
-**Date:** November 2025
-
----
-
-## Overview
-
-This laboratory introduces **polling-based I/O** and **interrupt-driven I/O** on the Zybo Z7 board using the AXI GPIO and AXI Interrupt Controller peripherals.  
-The goal is to progressively evolve from a simple polling program to a **dual-interrupt handler** with logical and arithmetic operations.
-
 ---
 
 ## Instructions
@@ -62,13 +49,13 @@ On button press, **add the last digit of your Student ID** to the current LED pa
 ```
 Lab 1/
 │
-├── AES/                             → Full Xilinx SDK 2019.1 workspace
-│   ├── a_lab1_polling_basic/        → SDK project (Part a)
-│   ├── b_lab1_interrupt_part1/      → SDK project (Part b)
-│   ├── c_lab1_interrupt_part2/      → SDK project (Part c)
-│   ├── *_bsp/                       → Auto-generated Board Support Packages
+├── AES/                                → Full Xilinx SDK 2019.1 workspace
+│   ├── a_lab1_polling_basic/           → SDK project (Part a)
+│   ├── b_lab1_interrupt_part1/         → SDK project (Part b)
+│   ├── c_lab1_interrupt_part2/         → SDK project (Part c)
+│   ├── *_bsp/                          → Auto-generated Board Support Packages
 │   ├── design_1_wrapper_hw_platform_0/ → Exported Vivado hardware platform (.hdf)
-│   └── SDK.log                      → Build/debug session log
+│   └── SDK.log                         → Build/debug session log
 │
 ├── a_lab1_polling_basic.c           → Clean and documented source (Part a)
 ├── b_lab1_interrupt_part1.c         → Clean and documented source (Part b)
@@ -84,28 +71,6 @@ Lab 1/
 
 ---
 
-## Testing Environment
-
-| Component                | Version / Description                                                            |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| **Hardware Board**       | *Digilent Zybo Z7 – MicroBlaze soft processor*                                   |
-| **Vivado Design Suite**  | *2019.1* – used to synthesize and export `design_1_wrapper_hw_platform_0.hdf`    |
-| **Xilinx SDK**           | *2019.1* – used for software development, compilation, debugging, and deployment |
-| **Projects Location**    | Inside folder `AES/` (SDK workspace with BSPs and hardware platform)             |
-| **UART Configuration**   | 115200 baud, 8N1 – serial output for `xil_printf()` debugging                    |
-| **Interrupt Controller** | AXI INTC connected to two interrupt sources: `SW` and `BTN`                      |
-| **GPIO Configuration**   | 3 AXI GPIO peripherals mapped to LEDs, Switches, and Buttons                     |
-| **Testing Methodology**  | Each program executed directly on the board via “Run on Hardware”                |
-| **Validation**           | Real switch toggling and button presses trigger interrupts and update LEDs       |
-| **Logging**              | UART console monitored in SDK terminal; logs confirm ISR sequence and logic      |
-
-**Additional Notes**
-
-* Each ISR includes **debounce filtering** (`usleep(50000)`) for stable button input.
-* Button interrupts are **level-sensitive** (triggered on both press and release).
-* The SDK workspace ensures **repeatable builds** and consistent hardware mapping across all versions.
-
----
 
 ## Implementations Summary
 
@@ -168,22 +133,8 @@ BTN pressed → (2 + 9) = 11 = 1011 → ~1011 = 0100
 Final LED = 0100
 ```
 
----
-
-### Summary
-
-| Part | Description            | Interrupt Sources | Example Output              |
-| ---- | ---------------------- | ----------------- | --------------------------- |
-| (a)  | Polling Basic          | None              | SW=0101 → LED=0101          |
-| (b)  | Interrupt – Logic      | SW + BTN          | SW=0101 → 0010 → BTN → 1101 |
-| (c)  | Interrupt – Arithmetic | SW + BTN          | LED=0010 → BTN → 0100       |
 
 ---
 
 
-
-
-
-
-*Academic Year 2025 – University of Cagliari*  
 *Developed by Lello Molinario*
