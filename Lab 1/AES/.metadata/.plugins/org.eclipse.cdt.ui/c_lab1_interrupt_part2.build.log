@@ -1,0 +1,21 @@
+01:47:41 **** Auto Build of configuration Debug for project c_lab1_interrupt_part2 ****
+make all 
+'Building file: ../src/main.c'
+'Invoking: MicroBlaze gcc compiler'
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/main.o" -I../../c_lab1_interrupt_part2_bsp/microblaze_0/include -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/main.d" -MT"src/main.o" -o "src/main.o" "../src/main.c"
+'Finished building: ../src/main.c'
+' '
+'Building target: c_lab1_interrupt_part2.elf'
+'Invoking: MicroBlaze gcc linker'
+mb-gcc -Wl,-T -Wl,../src/lscript.ld -L../../c_lab1_interrupt_part2_bsp/microblaze_0/lib -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -Wl,--gc-sections -o "c_lab1_interrupt_part2.elf"  ./src/main.o ./src/platform.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: c_lab1_interrupt_part2.elf'
+' '
+'Invoking: MicroBlaze Print Size'
+mb-size c_lab1_interrupt_part2.elf  |tee "c_lab1_interrupt_part2.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+   9368	    684	   3108	  13160	   3368	c_lab1_interrupt_part2.elf
+'Finished building: c_lab1_interrupt_part2.elf.size'
+' '
+
+01:47:42 Build Finished (took 949ms)
+

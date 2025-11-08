@@ -8,102 +8,181 @@
 
 ---
 
-##  Overview
+## Overview
+
 This laboratory introduces **polling-based I/O** and **interrupt-driven I/O** on the Zybo Z7 board using the AXI GPIO and AXI Interrupt Controller peripherals.  
-The goal is to progressively evolve from a simple polling program to a dual-interrupt handler with logic and arithmetic processing.
+The goal is to progressively evolve from a simple polling program to a **dual-interrupt handler** with logical and arithmetic operations.
 
 ---
 
-##  Instruction
-
-This assignment is related to Lab 1 on polling and interrupts.  
-Please refer to the provided workspace and code templates used in class.
+## Instructions
 
 Students must prepare the following versions:
 
 **(a)** *Polling Basic version* – Check the switches and show on LEDs the same binary pattern.
 
 **(b)** *Interrupt version (Part 1)* – Two interrupt sources (Switch + Button) using the AXI Interrupt Controller.  
-Constraint: use at least one OR / AND mask.
-- **SW interrupt:** On a switch change, display on the LEDs the binary index of the most-significant switch that is ON (3..0). If none are ON, display 0x00.
-- **BTN interrupt:** On button press / release, invert (~) the current LED pattern.
+Constraint: use at least one **OR / AND mask**.
+
+* **SW interrupt:** On a switch change, display on the LEDs the binary index of the most-significant switch that is ON (3..0).  
+  If none are ON, display `0x00`.
+* **BTN interrupt:** On button press / release, invert (`~`) the current LED pattern.
 
 ***Example Cycle:***
+
 
     Switch = 0b0101 → MSB = 2 → LED = 0010
     Button pressed → invert → 1101
     Final LEDs = 1101
 
-**(c)** *Interrupt version (Part 2)* – Modify the Button ISR:  
+**(c)** *Interrupt version (Part 2)* – Modify the Button ISR:
 On button press, **add the last digit of your Student ID** to the current LED pattern and then **invert (~)** the result.
-
-
-##  Hardware Mapping
-| Peripheral | Base Address | Description |
-|-------------|---------------|--------------|
-| `GPIO_LED`  | `0x40000000`  | 4-bit output LEDs |
-| `GPIO_SW`   | `0x40010000`  | 4-bit input switches |
-| `GPIO_BTN`  | `0x40020000`  | Push buttons (input) |
-| `INTC`      | `0x41200000`  | AXI Interrupt Controller |
-
-Registers used:
-- `DATA` (offset `0x0`)
-- `TRI`  (offset `0x4`) — direction control (`1` = input, `0` = output)
-- `IER`, `MER`, `IISR`, `IIAR` — interrupt control registers (AXI INTC)
 
 ---
 
-##  Implementations
+## Hardware Mapping
+
+| Peripheral | Base Address | Description              |
+| ---------- | ------------ | ------------------------ |
+| `GPIO_LED` | `0x40000000` | 4-bit output LEDs        |
+| `GPIO_SW`  | `0x40010000` | 4-bit input switches     |
+| `GPIO_BTN` | `0x40020000` | Push buttons (input)     |
+| `INTC`     | `0x41200000` | AXI Interrupt Controller |
+
+**Registers used:**
+
+* `DATA` (offset `0x0`)
+* `TRI`  (offset `0x4`) — direction control (`1` = input, `0` = output)
+* `IER`, `MER`, `IISR`, `IIAR` — interrupt control registers (AXI INTC)
+
+---
+
+## Project Structure
+
+```
+Lab 1/
+│
+├── AES/                             → Full Xilinx SDK 2019.1 workspace
+│   ├── a_lab1_polling_basic/        → SDK project (Part a)
+│   ├── b_lab1_interrupt_part1/      → SDK project (Part b)
+│   ├── c_lab1_interrupt_part2/      → SDK project (Part c)
+│   ├── *_bsp/                       → Auto-generated Board Support Packages
+│   ├── design_1_wrapper_hw_platform_0/ → Exported Vivado hardware platform (.hdf)
+│   └── SDK.log                      → Build/debug session log
+│
+├── a_lab1_polling_basic.c           → Clean and documented source (Part a)
+├── b_lab1_interrupt_part1.c         → Clean and documented source (Part b)
+├── c_lab1_interrupt_part2.c         → Clean and documented source (Part c)
+└── README.md                        → Lab documentation
+```
+
+**Notes:**
+
+* Folder `AES/` contains the **complete SDK workspace** used for compilation and on-board testing.
+* The `.c` files in the root are **clean standalone versions** for review and grading.
+* All three programs share the same **AXI GPIO** and **AXI Interrupt Controller** configuration.
+
+---
+
+## Testing Environment
+
+| Component                | Version / Description                                                            |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| **Hardware Board**       | *Digilent Zybo Z7 – MicroBlaze soft processor*                                   |
+| **Vivado Design Suite**  | *2019.1* – used to synthesize and export `design_1_wrapper_hw_platform_0.hdf`    |
+| **Xilinx SDK**           | *2019.1* – used for software development, compilation, debugging, and deployment |
+| **Projects Location**    | Inside folder `AES/` (SDK workspace with BSPs and hardware platform)             |
+| **UART Configuration**   | 115200 baud, 8N1 – serial output for `xil_printf()` debugging                    |
+| **Interrupt Controller** | AXI INTC connected to two interrupt sources: `SW` and `BTN`                      |
+| **GPIO Configuration**   | 3 AXI GPIO peripherals mapped to LEDs, Switches, and Buttons                     |
+| **Testing Methodology**  | Each program executed directly on the board via “Run on Hardware”                |
+| **Validation**           | Real switch toggling and button presses trigger interrupts and update LEDs       |
+| **Logging**              | UART console monitored in SDK terminal; logs confirm ISR sequence and logic      |
+
+**Additional Notes**
+
+* Each ISR includes **debounce filtering** (`usleep(50000)`) for stable button input.
+* Button interrupts are **level-sensitive** (triggered on both press and release).
+* The SDK workspace ensures **repeatable builds** and consistent hardware mapping across all versions.
+
+---
+
+## Implementations Summary
 
 ### 🔹 (a) `a_lab1_polling_basic.c`
-**Description:**  
-Polling-based version. Continuously reads the 4 switches and mirrors their binary value directly on the LEDs.
 
-**Features:**
-- Simple while loop polling GPIO input.
-- Updates LEDs only when input changes.
-- UART debug output (`xil_printf`) for traceability.
+**Polling-based version.**
+Reads the 4 switches and mirrors their binary value directly on the LEDs.
 
-**Expected Output:**
+**Features**
 
+* Continuous polling with change detection.
+* UART logging for each state change.
+
+**Output Example:**
+
+```
 SW = 0101 → LED = 0101
-
+```
 
 ---
 
 ### 🔹 (b) `b_lab1_interrupt_part1.c`
-**Description:**  
-Interrupt-based version (Part 1) using two sources — Switches and Buttons — through the AXI Interrupt Controller.
 
-**ISR behavior:**
-- **SW interrupt:** When a switch changes, display the **index of the most significant switch ON** (3..0) on LEDs.  
-  If no switches are ON, display `0000`.
-- **BTN interrupt:** When a button is pressed or released, invert (`~`) the current LED pattern.
+**Dual-interrupt version.**
+Handles both switch and button interrupts via AXI INTC.
+
+**ISR Logic**
+
+* SW interrupt → show MSB index of active switch.
+* BTN interrupt → invert the LED pattern.
+* Uses **OR-masks** in interrupt configuration (constraint requirement).
 
 **Example:**
 
-SW = 0101 → MSB = 2 → LED = 0010
-
+```
+SW = 0101 → LED = 0010
 BTN pressed → invert → LED = 1101
-
+```
 
 ---
 
 ### 🔹 (c) `c_lab1_interrupt_part2.c`
-**Description:**  
-Extended interrupt version. Similar to part (b) but modifies the **button ISR** to include arithmetic logic.
 
-**BTN ISR behavior:**
-- On button press, add the **last digit of the Student ID** to the current LED pattern, then **invert** the result.
+**Extended interrupt version.**
+Enhances the BTN ISR with arithmetic logic.
 
-**Example (Student ID ends with 9):**
+**ISR Logic**
 
-SW = 0101 → LED = 0101
+* On button press:
 
-BTN pressed → (LED + 9) = 1110 → invert → LED = 0001
+    1. Read current LED pattern.
+    2. Add **last Student ID digit (9)**.
+    3. Invert the result (~) and mask to 4 bits.
 
+**Example:**
+
+```
+LED = 0010 (2)
+BTN pressed → (2 + 9) = 11 = 1011 → ~1011 = 0100
+Final LED = 0100
+```
 
 ---
+
+### Summary
+
+| Part | Description            | Interrupt Sources | Example Output              |
+| ---- | ---------------------- | ----------------- | --------------------------- |
+| (a)  | Polling Basic          | None              | SW=0101 → LED=0101          |
+| (b)  | Interrupt – Logic      | SW + BTN          | SW=0101 → 0010 → BTN → 1101 |
+| (c)  | Interrupt – Arithmetic | SW + BTN          | LED=0010 → BTN → 0100       |
+
+---
+
+
+
+
 
 
 *Academic Year 2025 – University of Cagliari*  
