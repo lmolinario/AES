@@ -105,6 +105,7 @@ int main(void)
 
     while (1);  // Idle loop – logic handled in ISR
 
+    /* Not reached (infinite loop), but included for completeness */
     cleanup_platform();
     return 0;
 }
@@ -127,9 +128,9 @@ static void SystemInit(void)
     IER = MER = 0x0;
 
     /* Re-enable GPIO interrupt logic (OR-mask constraint) */
-    GIER_SW  |= 0x80000000U;
+    GIER_SW  |= 0x80000000U;  // Global enable
     GIER_BTN |= 0x80000000U;
-    IPIER_SW  |= 0x1U;
+    IPIER_SW  |= 0x1U; // Enable channel interrupt
     IPIER_BTN |= 0x1U;
 
     /* Configure and enable AXI INTC */
@@ -168,7 +169,6 @@ void myISR_partC(void)
     {
         unsigned int sw = *((volatile unsigned int*)(GPIO_SW_BASE)) & 0xF;
         int msb_index = -1;
-
         for (int i = 3; i >= 0; --i)
         {
             if (sw & (1U << i))

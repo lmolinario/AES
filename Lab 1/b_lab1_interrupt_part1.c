@@ -147,12 +147,12 @@ static void SystemInit(void)
 static void GpioInit(void)
 {
     /* SW and BTN as input (TRI=1), LED as output (TRI=0) */
-    *(volatile unsigned int*)(GPIO_SW_BASE  + GPIO_TRI_OFFSET)  = 0xF;
-    *(volatile unsigned int*)(GPIO_BTN_BASE + GPIO_TRI_OFFSET)  = 0xF;
-    *(volatile unsigned int*)(GPIO_LED_BASE + GPIO_TRI_OFFSET)  = 0x0;
+    *(volatile unsigned int*)(GPIO_SW_BASE  + GPIO_TRI_OFFSET)  = 0xF; // SW=input
+    *(volatile unsigned int*)(GPIO_BTN_BASE + GPIO_TRI_OFFSET)  = 0xF;  // BTN=input
+    *(volatile unsigned int*)(GPIO_LED_BASE + GPIO_TRI_OFFSET)  = 0x0;// LED=output
 
     /* Clear LEDs at startup */
-    *(volatile unsigned int*)(GPIO_LED_BASE) = 0x0;
+    *(volatile unsigned int*)(GPIO_LED_BASE) = 0x0; // Clear LEDs
 
     xil_printf("[Init] GPIOs configured (SW/BTN=IN, LED=OUT)\r\n");
 }
