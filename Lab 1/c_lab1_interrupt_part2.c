@@ -87,8 +87,8 @@ int main(void)
     init_platform();
     xil_printf("\r\n[Lab1 - Interrupt v2] Add(+9) + Invert logic\r\n");
 
-    SystemInit();
-    GpioInit();
+    SystemInit();   // Configure INTC + GPIO interrupt logic
+    GpioInit();     // Set GPIO directions
 
     /* Register interrupt handler */
     Xil_ExceptionInit();

@@ -27,7 +27,7 @@
 /* ============================================================
  *  MEMORY-MAPPED BASE ADDRESSES (from Vivado system design)
  * ============================================================ */
-#define GPIO_LED_BASE     0x40000000U   // AXI GPIO base address for LEDs
+#define GPIO_LED_BASE     0x40000000U   // AXI GPIO base address for LEDs - for all 'U' = unsigned constant → ensures positive address
 #define GPIO_SW_BASE      0x40010000U   // AXI GPIO base address for switches
 #define GPIO_TRI_OFFSET   0x4U          // Offset for TRI (direction) register
 
@@ -60,7 +60,7 @@ int main(void)
     while (1)
     {
         /* Read the 4-bit switch value (mask lower nibble) */
-        volatile unsigned int sw_value = *((volatile unsigned int*)(GPIO_SW_BASE)) & 0xF;
+        volatile unsigned int sw_value = *((volatile unsigned int*)(GPIO_SW_BASE)) & 0xF;// 'volatile' → always read actual HW register (no compiler caching)
 
         /* Update LEDs only on state change */
         if (sw_value != last_value)
@@ -104,11 +104,11 @@ int main(void)
 static void GpioInit(void)
 {
     /* Configure direction registers */
-    *(volatile unsigned int*)(GPIO_SW_BASE  + GPIO_TRI_OFFSET) = 0xF; // 4-bit input
-    *(volatile unsigned int*)(GPIO_LED_BASE + GPIO_TRI_OFFSET) = 0x0; // 4-bit output
+    *(volatile unsigned int*)(GPIO_SW_BASE  + GPIO_TRI_OFFSET) = 0xF; // 4-bit input (volatile → ensures actual HW write)
+    *(volatile unsigned int*)(GPIO_LED_BASE + GPIO_TRI_OFFSET) = 0x0; // 4-bit output (volatile → ensures actual HW write)
 
     /* Initialize LEDs to OFF (all zeros) */
-    *(volatile unsigned int*)(GPIO_LED_BASE) = 0x0;
+    *(volatile unsigned int*)(GPIO_LED_BASE) = 0x0; // volatile → force real write to LED register
 
     xil_printf("[Init] GPIO configured: SW=input, LED=output\r\n");
 }
@@ -120,7 +120,7 @@ static void GpioInit(void)
  */
 static void UpdateLeds(unsigned int sw_value)
 {
-    *(volatile unsigned int*)(GPIO_LED_BASE) = sw_value & 0xF;
+    *(volatile unsigned int*)(GPIO_LED_BASE) = sw_value & 0xF; // write 4 LSBs to LED register (volatile → ensure real HW write)
 }
 
 

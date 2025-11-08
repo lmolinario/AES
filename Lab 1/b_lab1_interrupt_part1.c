@@ -43,7 +43,7 @@
 /* ============================================================
  *  BASE ADDRESSES (from Vivado system design)
  * ============================================================ */
-#define GPIO_LED_BASE   0x40000000U   // AXI GPIO: LEDs (output)
+#define GPIO_LED_BASE   0x40000000U   // AXI GPIO: LEDs (output) - 'U' = unsigned constant
 #define GPIO_SW_BASE    0x40010000U   // AXI GPIO: Switches (input)
 #define GPIO_BTN_BASE   0x40020000U   // AXI GPIO: Buttons (input)
 #define GPIO_TRI_OFFSET 0x4U          // TRI register offset (direction)
@@ -85,8 +85,8 @@ int main(void)
     xil_printf("\r\n[Lab1 - Interrupt v1] Starting program...\r\n");
 
     /* --- Configure system and GPIOs --- */
-    SystemInit();
-    GpioInit();
+    SystemInit();     // Configure INTC + GPIO interrupt enable
+    GpioInit();       // Configure direction registers
 
     /* --- Register interrupt handler --- */
     Xil_ExceptionInit();
@@ -116,23 +116,23 @@ int main(void)
  ***************************************************************/
 static void SystemInit(void)
 {
-    /* Step 1: Clear any pending interrupts */
+    /* Clear any pending interrupts */
     IPISR_SW  = 0x1;
     IPISR_BTN = 0x1;
     IISR      = 0x3;
 
-    /* Step 2: Disable all interrupt sources before configuration */
+    /* Disable all interrupt sources before configuration */
     GIER_SW = GIER_BTN = 0x0;
     IPIER_SW = IPIER_BTN = 0x0;
     IER = MER = 0x0;
 
-    /* Step 3: Enable GPIO-level interrupts (using OR-masks) */
+    /* Enable GPIO-level interrupts (using OR-masks) */
     GIER_SW  |= 0x80000000U;   // Global enable
     GIER_BTN |= 0x80000000U;
     IPIER_SW  |= 0x1U;         // Enable channel interrupt
     IPIER_BTN |= 0x1U;
 
-    /* Step 4: Configure and enable INTC */
+    /*Configure and enable INTC */
     IER |= (0x1U | 0x2U);      // Enable IRQ0 and IRQ1 ← OR-mask
     MER |= 0x3U;               // Master enable (ME | HIE) ← OR-mask
 
