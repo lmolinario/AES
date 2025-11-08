@@ -122,7 +122,7 @@ Enhances the BTN ISR with arithmetic logic.
 * On button press:
 
     1. Read current LED pattern.
-    2. Add **last Student ID digit (9)**.
+    2. Add **last Student ID digit (9 in my case)**.
     3. Invert the result (~) and mask to 4 bits.
 
 **Example:**
