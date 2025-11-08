@@ -41,6 +41,8 @@ Each lab focuses on hands-on embedded programming for the **MicroBlaze soft-core
 ```
 AES Labs/
 │
+│── img/    → images
+│ 
 ├── Lab 1/
 │   ├── a_lab1_polling_basic.c
 │   ├── b_lab1_interrupt_part1.c

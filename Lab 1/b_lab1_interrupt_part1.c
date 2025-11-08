@@ -133,8 +133,8 @@ static void SystemInit(void)
     IPIER_BTN |= 0x1U;
 
     /* Step 4: Configure and enable INTC */
-    IER |= (0x1U | 0x2U);      // Enable IRQ0 and IRQ1
-    MER |= 0x3U;               // Master enable (ME | HIE)
+    IER |= (0x1U | 0x2U);      // Enable IRQ0 and IRQ1 ← OR-mask
+    MER |= 0x3U;               // Master enable (ME | HIE) ← OR-mask
 
     xil_printf("[Init] INTC configured: IRQ0=SW, IRQ1=BTN\r\n");
 }

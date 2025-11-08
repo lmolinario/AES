@@ -133,8 +133,8 @@ static void SystemInit(void)
     IPIER_BTN |= 0x1U;
 
     /* Configure and enable AXI INTC */
-    IER |= (0x1U | 0x2U);   // Enable IRQ0 and IRQ1
-    MER |= 0x3U;            // Master + Hardware enable
+    IER |= (0x1U | 0x2U);   // Enable IRQ0 and IRQ1 ← OR-mask
+    MER |= 0x3U;            // Master + Hardware enable ← OR-mask
 
     xil_printf("[SystemInit] INTC and GPIO interrupt lines configured.\r\n");
 }
