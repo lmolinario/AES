@@ -77,7 +77,7 @@
 static void SystemInit(void);
 static void GpioInit(void);
 static void to_bin4(unsigned int value, char out[5]);
-void myISR(void) __attribute__((interrupt_handler));
+void myISR_partC(void) __attribute__((interrupt_handler));
 
 /***************************************************************
  *  MAIN PROGRAM
@@ -94,7 +94,7 @@ int main(void)
     Xil_ExceptionInit();
     Xil_ExceptionRegisterHandler(
         XIL_EXCEPTION_ID_INT,
-        (Xil_ExceptionHandler)myISR,
+        (Xil_ExceptionHandler)myISR_partC,
         NULL
     );
     Xil_ExceptionEnable();
@@ -153,13 +153,13 @@ static void GpioInit(void)
 }
 
 /***************************************************************
- *  myISR
+ *  myISR_partC
  *  ------------------------------------------------------------
  *  Central ISR handling both sources:
  *   - IRQ0: Switches → LED = index of MSB switch ON
  *   - IRQ1: Button   → (LED + 9), invert (~), mask 4 bits
  ***************************************************************/
-void myISR(void)
+void myISR_partC(void)
 {
     volatile unsigned int pending = IISR;
 

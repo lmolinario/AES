@@ -122,3 +122,14 @@ static void UpdateLeds(unsigned int sw_value)
 {
     *(volatile unsigned int*)(GPIO_LED_BASE) = sw_value & 0xF;
 }
+
+
+/***************************************************************
+ *  TECHNICAL NOTES
+ *  ------------------------------------------------------------
+ *  This polling-based version does not use interrupts, but it
+ *  maintains the same memory map and structure as the interrupt
+ *  versions (Part b and Part c). When compiling multiple labs in
+ *  the same SDK workspace, use distinct function names for ISR
+ *  handlers in later parts  to avoid linker symbol conflicts.
+ ***************************************************************/

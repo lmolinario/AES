@@ -74,7 +74,7 @@
 static void SystemInit(void);
 static void GpioInit(void);
 static void to_bin4(unsigned int value, char out[5]);
-void myISR(void) __attribute__((interrupt_handler));
+void myISR_partB(void) __attribute__((interrupt_handler));
 
 /***************************************************************
  *  MAIN FUNCTION
@@ -92,7 +92,7 @@ int main(void)
     Xil_ExceptionInit();
     Xil_ExceptionRegisterHandler(
         XIL_EXCEPTION_ID_INT,
-        (Xil_ExceptionHandler)myISR,
+        (Xil_ExceptionHandler)myISR_partB,
         NULL
     );
     Xil_ExceptionEnable();
@@ -104,7 +104,7 @@ int main(void)
     /* Idle loop – interrupts will handle everything */
     while (1);
 
-    /* Never reached */
+    /* Not reached (infinite loop), but included for completeness */
     cleanup_platform();
     return 0;
 }
@@ -158,13 +158,13 @@ static void GpioInit(void)
 }
 
 /***************************************************************
- *  myISR
+ *  myISR_partB
  *  ------------------------------------------------------------
  *  Interrupt Service Routine (ISR) handling both sources:
  *   - IRQ0: Switch event
  *   - IRQ1: Button press/release
  ***************************************************************/
-void myISR(void)
+void myISR_partB(void)
 {
     volatile unsigned int pending = IISR;  // Read pending flags
 

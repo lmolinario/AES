@@ -1,21 +1,6 @@
-01:43:43 **** Incremental Build of configuration Debug for project b_lab1_interrupt_part1 ****
+13:00:58 **** Incremental Build of configuration Debug for project b_lab1_interrupt_part1 ****
 make all 
-'Building file: ../src/main.c'
-'Invoking: MicroBlaze gcc compiler'
-mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/main.o" -I../../b_lab1_interrupt_part1_bsp/microblaze_0/include -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/main.d" -MT"src/main.o" -o "src/main.o" "../src/main.c"
-'Finished building: ../src/main.c'
-' '
-'Building target: b_lab1_interrupt_part1.elf'
-'Invoking: MicroBlaze gcc linker'
-mb-gcc -Wl,-T -Wl,../src/lscript.ld -L../../b_lab1_interrupt_part1_bsp/microblaze_0/lib -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -Wl,--gc-sections -o "b_lab1_interrupt_part1.elf"  ./src/main.o ./src/platform.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
-'Finished building target: b_lab1_interrupt_part1.elf'
-' '
-'Invoking: MicroBlaze Print Size'
-mb-size b_lab1_interrupt_part1.elf  |tee "b_lab1_interrupt_part1.elf.size"
-   text	   data	    bss	    dec	    hex	filename
-   9316	    684	   3112	  13112	   3338	b_lab1_interrupt_part1.elf
-'Finished building: b_lab1_interrupt_part1.elf.size'
-' '
+make: Nothing to be done for 'all'.
 
-01:43:44 Build Finished (took 1s.30ms)
+13:00:59 Build Finished (took 198ms)
 
