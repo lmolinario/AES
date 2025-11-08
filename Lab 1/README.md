@@ -65,6 +65,7 @@ Polling-based version. Continuously reads the 4 switches and mirrors their binar
 - UART debug output (`xil_printf`) for traceability.
 
 **Expected Output:**
+
 SW = 0101 → LED = 0101
 
 
@@ -80,7 +81,9 @@ Interrupt-based version (Part 1) using two sources — Switches and Buttons — 
 - **BTN interrupt:** When a button is pressed or released, invert (`~`) the current LED pattern.
 
 **Example:**
+
 SW = 0101 → MSB = 2 → LED = 0010
+
 BTN pressed → invert → LED = 1101
 
 
@@ -94,20 +97,11 @@ Extended interrupt version. Similar to part (b) but modifies the **button ISR** 
 - On button press, add the **last digit of the Student ID** to the current LED pattern, then **invert** the result.
 
 **Example (Student ID ends with 9):**
+
 SW = 0101 → LED = 0101
+
 BTN pressed → (LED + 9) = 1110 → invert → LED = 0001
 
-
----
-
-## Build & Run
-**Tools:** Xilinx Vitis / SDK  
-**Steps:**
-1. Import project (`File → New → Application Project`).
-2. Copy `.c` files to `src/`.
-3. Select *MicroBlaze* processor target.
-4. Build and program the Zybo board.
-5. Open UART terminal @ 115200 baud to monitor messages.
 
 ---
 

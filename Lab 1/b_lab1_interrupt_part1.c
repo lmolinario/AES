@@ -5,62 +5,62 @@
  *  Student ID: 70/90/000369
  *  Date: November 2025
  *
- *  Description:
+ *  Description
  *  ------------------------------------------------------------
- *  Dual-interrupt handler using AXI Interrupt Controller (INTC).
+ *  Dual-interrupt program using the AXI Interrupt Controller (INTC)
+ *  on the MicroBlaze processor (Zybo Z7 board).
  *
- *   • SW interrupt: show index of the most significant switch ON.
- *   • BTN interrupt: invert (~) current LED pattern.
+ *   • Switch interrupt (SW):
+ *       On a switch change, reads the 4 input switches and updates
+ *       the LEDs with the binary index (0..3) of the most-significant
+ *       switch that is ON. If no switches are ON → LEDs = 0x00.
  *
- *  Features:
- *   • Two interrupt sources (SW + BTN)
- *   • AXI INTC configuration (IER, MER, IISR, IIAR)
- *   • Software debounce for BTN interrupt
- *   • UART logging for traceability
+ *   • Button interrupt (BTN):
+ *       On a button press or release, negates (bitwise invert, ~)
+ *       the current LED pattern (4 least significant bits).
  *
- *  Notes:
- *   This implementation runs on the MicroBlaze soft processor
- *   inside the Zybo Z7 board. The INTC aggregates interrupts
- *   from GPIO peripherals and notifies the CPU.
+ *  Example cycle:
+ *       SW  = 0b0101 → MSB = 2 → LED = 0010
+ *       BTN pressed  → invert  → LED = 1101 (final)
+ *
+ *  Features
+ *  ------------------------------------------------------------
+ *   • Two interrupt sources: SW (IRQ0) and BTN (IRQ1)
+ *   • AXI INTC configuration: IER, MER, IISR, IIAR
+ *   • Uses OR-masks (assignment constraint)
+ *   • Software debounce for BTN (~50 ms)
+ *   • UART logging for traceability and debugging
  ***************************************************************/
 
 #include <stdio.h>
 #include "platform.h"
 #include "xil_printf.h"
-#include "sleep.h"
 #include "xil_exception.h"
+#include "sleep.h"
 
 /* ============================================================
  *  BASE ADDRESSES (from Vivado hardware design)
- *  Each AXI GPIO has two channels:
+ *  Each AXI GPIO has:
  *   - DATA register (offset 0x0)
- *   - TRI  register (offset 0x4) for direction
+ *   - TRI register  (offset 0x4) for direction
+ *       1 = input, 0 = output
  * ============================================================ */
-#define GPIO_LED_BASE   0x40000000U   // LED output GPIO
-#define GPIO_SW_BASE    0x40010000U   // Switch input GPIO
-#define GPIO_BTN_BASE   0x40020000U   // Button input GPIO
+#define GPIO_LED_BASE   0x40000000U   // AXI GPIO: LED output
+#define GPIO_SW_BASE    0x40010000U   // AXI GPIO: Switch input
+#define GPIO_BTN_BASE   0x40020000U   // AXI GPIO: Button input
 #define GPIO_TRI_OFFSET 0x4U          // Direction register offset
 #define INTC_BASE       0x41200000U   // AXI Interrupt Controller
 
 /* ============================================================
  *  INTERRUPT CONTROLLER (AXI INTC) REGISTERS
- *  ------------------------------------------------------------
- *  IISR : Interrupt Status Register
- *  IER  : Interrupt Enable Register
- *  IIAR : Interrupt Acknowledge Register
- *  MER  : Master Enable Register (global enable)
  * ============================================================ */
-#define IISR (*(volatile unsigned int*)(INTC_BASE + 0x00U))
-#define IER  (*(volatile unsigned int*)(INTC_BASE + 0x08U))
-#define IIAR (*(volatile unsigned int*)(INTC_BASE + 0x0CU))
-#define MER  (*(volatile unsigned int*)(INTC_BASE + 0x1CU))
+#define IISR (*(volatile unsigned int*)(INTC_BASE + 0x00U))  // Status
+#define IER  (*(volatile unsigned int*)(INTC_BASE + 0x08U))  // Enable
+#define IIAR (*(volatile unsigned int*)(INTC_BASE + 0x0CU))  // Ack source
+#define MER  (*(volatile unsigned int*)(INTC_BASE + 0x1CU))  // Master enable
 
 /* ============================================================
- *  GPIO INTERRUPT REGISTERS (local interrupt control)
- *  ------------------------------------------------------------
- *  GIER : Global Interrupt Enable
- *  IPIER: Interrupt Enable Register
- *  IPISR: Interrupt Status Register
+ *  GPIO INTERRUPT REGISTERS (local control per peripheral)
  * ============================================================ */
 #define GIER_SW   (*(volatile unsigned int*)(GPIO_SW_BASE  + 0x011CU))
 #define IPIER_SW  (*(volatile unsigned int*)(GPIO_SW_BASE  + 0x0128U))
@@ -72,23 +72,32 @@
 /* ============================================================
  *  FUNCTION PROTOTYPES
  * ============================================================ */
-static void to_bin4(unsigned int value, char out[5]);   // Convert 4-bit integer to binary string
-void myISR(void) __attribute__((interrupt_handler));    // Declare ISR with MicroBlaze attribute
+static void SystemInit(void);
+static void GpioInit(void);
+static void to_bin4(unsigned int value, char out[5]); // Convert 4-bit int to "0101"
+void myISR(void) __attribute__((interrupt_handler));  // MicroBlaze ISR attribute
 
-/* ============================================================
+/***************************************************************
  *  MAIN PROGRAM
- * ============================================================ */
+ ***************************************************************/
 int main(void)
 {
-    /* Initialize hardware platform:
-     * - UART (for xil_printf)
-     * - caches and basic peripherals
-     */
-    init_platform();
+    init_platform();  // Init UART, caches, peripherals
     xil_printf("\r\n[Lab1 - Interrupt v1] MSB index + Invert logic\r\n");
 
+    /* Configure the system:
+     * - Reset all interrupt sources and controller
+     * - Re-enable INTC and GPIO interrupt outputs
+     */
+    SystemInit();
 
-    /* === Register ISR globally for MicroBlaze === */
+    /* Interrupt mapping:
+     *   IRQ0 → Switch GPIO
+     *   IRQ1 → Push Button GPIO
+     */
+    GpioInit();  // Configure GPIO directions
+
+    /* Register ISR in MicroBlaze exception system */
     Xil_ExceptionInit();
     Xil_ExceptionRegisterHandler(
         XIL_EXCEPTION_ID_INT,
@@ -96,126 +105,127 @@ int main(void)
         NULL
     );
     Xil_ExceptionEnable();
-    /* ------------------------------------------------------------
-     *  Configure GPIO directions
-     *  TRI = 1 → input
-     *  TRI = 0 → output
-     * ------------------------------------------------------------ */
-    *(volatile unsigned int*)(GPIO_SW_BASE  + GPIO_TRI_OFFSET)  = 0xF; // SW as 4-bit input
-    *(volatile unsigned int*)(GPIO_BTN_BASE + GPIO_TRI_OFFSET)  = 0xF; // BTN as input
-    *(volatile unsigned int*)(GPIO_LED_BASE + GPIO_TRI_OFFSET)  = 0x0; // LED as output
 
-    /* Clear LEDs at startup to defined state */
-    *(volatile unsigned int*)(GPIO_LED_BASE) = 0x0;
+    microblaze_enable_interrupts();  // Global enable (MSR[IE]=1)
+    xil_printf("[System] Ready. Waiting for SW/BTN interrupts...\r\n");
 
-    /* ------------------------------------------------------------
-     *  Enable GPIO interrupt logic
-     *  Each peripheral must enable its own interrupt output
-     *  before the INTC can aggregate them.
-     * ------------------------------------------------------------ */
-    GIER_SW   = 0x80000000;   // Global enable for SW GPIO
-    GIER_BTN  = 0x80000000;   // Global enable for BTN GPIO
-    IPIER_SW  = 0x1;          // Enable interrupt from channel 1
-    IPIER_BTN = 0x1;          // Enable interrupt from channel 1
-
-    /* ------------------------------------------------------------
-     *  Configure and enable AXI Interrupt Controller
-     * ------------------------------------------------------------ */
-    IER = 0x3;   // Enable IRQ0 (SW) and IRQ1 (BTN)
-    MER = 0x3;   // Enable master interrupt output and hardware mode
-    microblaze_enable_interrupts(); // Enable interrupts globally in CPU
-
-    xil_printf("[System] Interrupt controller configured. Waiting for events...\r\n");
-
-
-
-    /* Idle main loop — ISR handles everything asynchronously */
+    /* Infinite loop – CPU sleeps between interrupts */
     while (1);
-
-    /* Not reached, but included for correctness */
-    cleanup_platform();
-    return 0;
 }
 
-/* ============================================================
- *  INTERRUPT SERVICE ROUTINE (ISR)
+/***************************************************************
+ *  SystemInit
  *  ------------------------------------------------------------
- *  This function handles both SW and BTN interrupts.
- *  The INTC indicates which sources are pending.
- * ============================================================ */
+ *  Initializes the interrupt controller and peripherals in
+ *  a known, clean state. Prevents stale interrupt conditions
+ *  after reprogramming or soft-reset.
+ ***************************************************************/
+static void SystemInit(void)
+{
+    /* --- Step 1: clear pending flags --- */
+    IPISR_SW  = 0x1;   // Clear SW GPIO interrupt (write-1-to-clear)
+    IPISR_BTN = 0x1;   // Clear BTN GPIO interrupt
+    IISR      = 0x3;   // Clear both IRQ0 and IRQ1 in INTC
+
+    /* --- Step 2: disable all interrupt outputs --- */
+    GIER_SW = GIER_BTN = 0x0;
+    IPIER_SW = IPIER_BTN = 0x0;
+    IER = MER = 0x0;
+
+    /* --- Step 3: re-enable GPIO interrupt logic --- */
+    /* Use OR-masks as required by the assignment constraint */
+    GIER_SW  |= 0x80000000U;    // Global enable for SW GPIO
+    GIER_BTN |= 0x80000000U;    // Global enable for BTN GPIO
+    IPIER_SW  |= 0x1U;          // Enable channel 1 interrupt
+    IPIER_BTN |= 0x1U;
+
+    /* --- Step 4: configure and enable AXI INTC --- */
+    IER |= (0x1U | 0x2U);       // Enable IRQ0 (SW) ORed with IRQ1 (BTN)
+    MER |= 0x3U;                // Enable master + hardware mode
+
+    xil_printf("[SystemInit] INTC and GPIO interrupt lines configured.\r\n");
+}
+
+/***************************************************************
+ *  GpioInit
+ *  ------------------------------------------------------------
+ *  Sets direction of GPIO channels and initializes LEDs.
+ ***************************************************************/
+static void GpioInit(void)
+{
+    *(volatile unsigned int*)(GPIO_SW_BASE  + GPIO_TRI_OFFSET)  = 0xF; // SW = input
+    *(volatile unsigned int*)(GPIO_BTN_BASE + GPIO_TRI_OFFSET)  = 0xF; // BTN = input
+    *(volatile unsigned int*)(GPIO_LED_BASE + GPIO_TRI_OFFSET)  = 0x0; // LED = output
+    *(volatile unsigned int*)(GPIO_LED_BASE) = 0x0;                    // Clear LEDs
+}
+
+/***************************************************************
+ *  myISR
+ *  ------------------------------------------------------------
+ *  Interrupt handler for both sources (SW:IRQ0, BTN:IRQ1).
+ *  Each event is identified using INTC pending bits.
+ ***************************************************************/
 void myISR(void)
 {
-    unsigned int pending = IISR;  // snapshot of pending interrupt sources
+    volatile unsigned int pending = IISR;  // Snapshot pending sources
 
-    /* ----------------------- SW INTERRUPT ----------------------- */
+    /* ---------------- SWITCH INTERRUPT (IRQ0) ---------------- */
     if (pending & 0x1U) {
-        /* Read switch state (4 bits only) */
         unsigned int sw = *((volatile unsigned int*)(GPIO_SW_BASE)) & 0xF;
 
-        /* Determine the most significant bit (MSB) that is ON */
+        /* Find most significant active switch */
         int msb_index = -1;
         for (int i = 3; i >= 0; --i) {
-            if (sw & (1U << i)) {
-                msb_index = i;
-                break;
-            }
+            if (sw & (1U << i)) { msb_index = i; break; }
         }
 
-        /* LED pattern = binary index of MSB active switch */
-        unsigned int pattern = (msb_index < 0) ? 0U : (unsigned int)msb_index;
-        *((volatile unsigned int*)(GPIO_LED_BASE)) = pattern;
+        /* LED pattern = MSB index or 0x00 if no switch is ON */
+        unsigned int led_pattern = (msb_index < 0) ? 0x0U : (unsigned int)msb_index;
+        *((volatile unsigned int*)(GPIO_LED_BASE)) = led_pattern;
 
-        /* Convert to human-readable binary strings for UART */
+        /* UART trace (binary representation) */
         char sw_str[5], led_str[5];
         to_bin4(sw, sw_str);
-        to_bin4(pattern, led_str);
+        to_bin4(led_pattern, led_str);
+        xil_printf("[SW IRQ] SW=%s → LED=%s (MSB=%d)\r\n",
+                   sw_str, led_str, (msb_index < 0 ? -1 : msb_index));
 
-        /* Print debug message */
-        if (msb_index < 0)
-            xil_printf("[SW IRQ] SW=%s -> LED=%s (index=none)\r\n", sw_str, led_str);
-        else
-            xil_printf("[SW IRQ] SW=%s -> LED=%s (index=%d)\r\n", sw_str, led_str, msb_index);
-
-        /* Acknowledge interrupt:
-         * - Clear GPIO IP interrupt flag
-         * - Acknowledge INTC source
-         */
+        /* Acknowledge SW interrupt (GPIO + INTC) */
         IPISR_SW = 0x1;
         IIAR     = 0x1;
     }
 
-    /* ---------------------- BTN INTERRUPT ----------------------- */
+    /* ---------------- BUTTON INTERRUPT (IRQ1) ---------------- */
     if (pending & 0x2U) {
-        /* Simple software debounce (~50 ms) */
+        /* Debounce delay (~50 ms)
+         * Note: button triggers both press & release (active-low). */
         usleep(50000);
 
-        /* Read current LED value */
+        /* Invert 4-bit LED pattern */
         unsigned int led = *((volatile unsigned int*)(GPIO_LED_BASE)) & 0xF;
-
-        /* Invert all bits (4-bit mask) */
         unsigned int inv = (~led) & 0xF;
         *((volatile unsigned int*)(GPIO_LED_BASE)) = inv;
 
-        /* Print UART log */
+        /* UART trace for visibility */
         char inv_str[5];
         to_bin4(inv, inv_str);
         xil_printf("[BTN IRQ] Invert LED -> %s\r\n", inv_str);
 
-        /* Acknowledge interrupt for BTN */
+        /* Acknowledge BTN interrupt (GPIO + INTC) */
         IPISR_BTN = 0x1;
         IIAR      = 0x2;
     }
 }
 
-/* ============================================================
- *  SUPPORT FUNCTION
+/***************************************************************
+ *  to_bin4
  *  ------------------------------------------------------------
- *  Converts a 4-bit integer (0–15) into a null-terminated
- *  string of '0' and '1' characters for UART logging.
- * ============================================================ */
+ *  Converts a 4-bit integer into a binary string for UART logs.
+ *  Example: 0x5 → "0101"
+ ***************************************************************/
 static void to_bin4(unsigned int value, char out[5])
 {
     for (int bit = 3; bit >= 0; --bit)
         out[3 - bit] = (value & (1U << bit)) ? '1' : '0';
-    out[4] = '\0'; // terminate string
+    out[4] = '\0';
 }
