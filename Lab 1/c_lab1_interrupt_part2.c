@@ -43,6 +43,10 @@
 
 /* ============================================================
  *  BASE ADDRESSES (from Vivado hardware design)
+ *  Each AXI GPIO has:
+ *   - DATA register (offset 0x0)
+ *   - TRI register  (offset 0x4) for direction
+ *       1 = input, 0 = output
  * ============================================================ */
 #define GPIO_LED_BASE   0x40000000U   // AXI GPIO: LED output
 #define GPIO_SW_BASE    0x40010000U   // AXI GPIO: Switch input
@@ -76,8 +80,8 @@
  * ============================================================ */
 static void SystemInit(void);
 static void GpioInit(void);
-static void to_bin4(unsigned int value, char out[5]);
-void myISR(void) __attribute__((interrupt_handler));
+static void to_bin4(unsigned int value, char out[5]);// Convert 4-bit int to "0101"
+void myISR(void) __attribute__((interrupt_handler));// MicroBlaze ISR attribute
 
 /***************************************************************
  *  MAIN PROGRAM
@@ -94,7 +98,7 @@ int main(void)
      *   IRQ0 → Switches GPIO
      *   IRQ1 → Push button GPIO
      */
-    GpioInit();
+    GpioInit(); // Configure GPIO directions
 
     /* Register our ISR in the MicroBlaze exception system */
     Xil_ExceptionInit();
@@ -121,33 +125,36 @@ int main(void)
 /***************************************************************
  *  SystemInit
  *  ------------------------------------------------------------
- *  Brings the interrupt system (INTC + GPIO) to a clean state
- *  and then enables the two interrupt sources.
+ *  Initializes the interrupt controller and peripherals in
+ *  a known, clean state. Prevents stale interrupt conditions
+ *  after reprogramming or soft-reset.
  ***************************************************************/
 static void SystemInit(void)
 {
-    /* 1) Clear any pending interrupt flags (GPIO + INTC) */
+    /* --- Step 1: clear pending flags --- */
     IPISR_SW  = 0x1;   // Clear SW GPIO interrupt (write-1-to-clear)
     IPISR_BTN = 0x1;   // Clear BTN GPIO interrupt
     IISR      = 0x3;   // Clear both IRQ0 and IRQ1 in INTC
 
-    /* 2) Disable outputs while reconfiguring */
+    /* --- Step 2: disable all interrupt outputs --- */
     GIER_SW = GIER_BTN = 0x0;
     IPIER_SW = IPIER_BTN = 0x0;
     IER = MER = 0x0;
 
-    /* 3) Re-enable GPIO interrupt logic */
+    /* --- Step 3: re-enable GPIO interrupt logic --- */
+    /* Use OR-masks as required by the assignment constraint */
     GIER_SW  |= 0x80000000U;    // Global enable for SW GPIO
     GIER_BTN |= 0x80000000U;    // Global enable for BTN GPIO
-    IPIER_SW  |= 0x1U;          // Enable channel 1 interrupt (SW)
-    IPIER_BTN |= 0x1U;          // Enable channel 1 interrupt (BTN)
+    IPIER_SW  |= 0x1U;          // Enable channel 1 interrupt
+    IPIER_BTN |= 0x1U;
 
-    /* 4) Configure and enable AXI INTC (using OR-mask as in Part b) */
+    /* --- Step 4: configure and enable AXI INTC --- */
     IER |= (0x1U | 0x2U);       // Enable IRQ0 (SW) ORed with IRQ1 (BTN)
-    MER |= 0x3U;                // Master enable + hardware mode
+    MER |= 0x3U;                // Enable master + hardware mode
 
     xil_printf("[SystemInit] INTC and GPIO interrupt lines configured.\r\n");
 }
+
 
 /***************************************************************
  *  GpioInit

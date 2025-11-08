@@ -85,10 +85,7 @@ int main(void)
     init_platform();  // Init UART, caches, peripherals
     xil_printf("\r\n[Lab1 - Interrupt v1] MSB index + Invert logic\r\n");
 
-    /* Configure the system:
-     * - Reset all interrupt sources and controller
-     * - Re-enable INTC and GPIO interrupt outputs
-     */
+    /* Configure interrupt controller and clear any stale flags */
     SystemInit();
 
     /* Interrupt mapping:
@@ -111,8 +108,11 @@ int main(void)
 
     /* Infinite loop – CPU sleeps between interrupts */
     while (1);
-}
 
+    /* Not reached, but provided for completeness */
+    cleanup_platform();
+    return 0;
+}
 /***************************************************************
  *  SystemInit
  *  ------------------------------------------------------------
@@ -173,17 +173,20 @@ void myISR(void)
     if (pending & 0x1U) {
         unsigned int sw = *((volatile unsigned int*)(GPIO_SW_BASE)) & 0xF;
 
-        /* Find most significant active switch */
+        /* Find index of most significant '1' (3..0), or -1 if none */
         int msb_index = -1;
         for (int i = 3; i >= 0; --i) {
-            if (sw & (1U << i)) { msb_index = i; break; }
+            if (sw & (1U << i)) {
+                msb_index = i;
+                break;
+            }
         }
 
         /* LED pattern = MSB index or 0x00 if no switch is ON */
         unsigned int led_pattern = (msb_index < 0) ? 0x0U : (unsigned int)msb_index;
         *((volatile unsigned int*)(GPIO_LED_BASE)) = led_pattern;
 
-        /* UART trace (binary representation) */
+        /* UART debug (binary strings) */
         char sw_str[5], led_str[5];
         to_bin4(sw, sw_str);
         to_bin4(led_pattern, led_str);
