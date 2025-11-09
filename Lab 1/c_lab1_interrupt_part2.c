@@ -87,10 +87,17 @@ int main(void)
     init_platform();
     xil_printf("\r\n[Lab1 - Interrupt v2] Add(+9) + Invert logic\r\n");
 
+
+    /* UART Debug Insight:
+    * Output visible through RealTerm (Windows) or any serial terminal
+    * at 115200 baud, 8 data bits, no parity, 1 stop bit (8N1).
+    * Each switch change triggers a UART message showing the binary LED mapping.
+    */
+
     SystemInit();   // Configure INTC + GPIO interrupt logic
     GpioInit();     // Set GPIO directions
 
-    /* Register interrupt handler */
+    /* Register interrupt handler via Xilinx exception API */
     Xil_ExceptionInit();
     Xil_ExceptionRegisterHandler(
         XIL_EXCEPTION_ID_INT,
@@ -105,7 +112,9 @@ int main(void)
 
     while (1);  // Idle loop – logic handled in ISR
 
-    /* Not reached (infinite loop), but included for completeness */
+    /* Not reached: the program runs indefinitely inside the main loop.
+    * Included for completeness and good practice when using Xilinx SDK.
+    * cleanup_platform() would de-initialize UART/caches if ever reached. */
     cleanup_platform();
     return 0;
 }
@@ -117,6 +126,12 @@ int main(void)
  ***************************************************************/
 static void SystemInit(void)
 {
+
+    /* NOTE ON 'volatile':
+    * 'volatile' ensures that each read/write actually accesses
+    * the physical hardware registers instead of cached values.
+    */
+
     /* Clear pending interrupts */
     IPISR_SW  = 0x1;
     IPISR_BTN = 0x1;
@@ -133,7 +148,10 @@ static void SystemInit(void)
     IPIER_SW  |= 0x1U; // Enable channel interrupt
     IPIER_BTN |= 0x1U;
 
-    /* Configure and enable AXI INTC */
+    /* Configure and enable AXI INTC
+    * OR-mask logic is used to preserve previous bits when enabling
+    * multiple interrupt lines simultaneously.
+    */
     IER |= (0x1U | 0x2U);   // Enable IRQ0 and IRQ1 ← OR-mask
     MER |= 0x3U;            // Master + Hardware enable ← OR-mask
 
@@ -232,3 +250,24 @@ static void to_bin4(unsigned int value, char out[5])
         out[3 - bit] = (value & (1U << bit)) ? '1' : '0';
     out[4] = '\0';
 }
+
+
+
+/***************************************************************
+ *  SYSTEM OPERATION SUMMARY
+ *  ------------------------------------------------------------
+ *  - INTC aggregates two IRQ sources (SW, BTN)
+ *  - SW IRQ updates LEDs with index of MSB active switch
+ *  - BTN IRQ computes ~(LED + 9) & 0xF and updates LEDs
+ *  - UART provides trace logs for both ISR events
+ ***************************************************************/
+
+/***************************************************************
+ *  TECHNICAL NOTES
+ *  ------------------------------------------------------------
+ *  • Proper interrupt servicing order: clear peripheral → clear INTC
+ *  • OR-mask enables multiple lines without overwriting bits
+ *  • 'volatile' ensures reliable hardware access
+ *  • Debounce delay avoids spurious BTN triggers
+ *  • The 4-bit mask confines LED results to valid range (0–15)
+ ***************************************************************/

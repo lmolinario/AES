@@ -84,6 +84,13 @@ int main(void)
     init_platform();  // Initialize UART, caches, and peripherals
     xil_printf("\r\n[Lab1 - Interrupt v1] Starting program...\r\n");
 
+
+    /* UART Debug Insight:
+    * Output visible through RealTerm (Windows) or any serial terminal
+    * at 115200 baud, 8 data bits, no parity, 1 stop bit (8N1).
+    * Each switch change triggers a UART message showing the binary LED mapping.
+    */
+
     /* --- Configure system and GPIOs --- */
     SystemInit();     // Configure INTC + GPIO interrupt enable
     GpioInit();       // Configure direction registers
@@ -104,7 +111,9 @@ int main(void)
     /* Idle loop – interrupts will handle everything */
     while (1);
 
-    /* Not reached (infinite loop), but included for completeness */
+    /* Not reached: the program runs indefinitely inside the main loop.
+    * Included for completeness and good practice when using Xilinx SDK.
+    * cleanup_platform() would de-initialize UART/caches if ever reached. */
     cleanup_platform();
     return 0;
 }
@@ -116,6 +125,12 @@ int main(void)
  ***************************************************************/
 static void SystemInit(void)
 {
+    /* NOTE ON 'volatile':
+     * The 'volatile' qualifier forces each register access
+     * to actually read/write the hardware address, avoiding
+     * compiler optimizations that could cache values.
+     */
+
     /* Clear any pending interrupts */
     IPISR_SW  = 0x1;
     IPISR_BTN = 0x1;
@@ -126,7 +141,9 @@ static void SystemInit(void)
     IPIER_SW = IPIER_BTN = 0x0;
     IER = MER = 0x0;
 
-    /* Enable GPIO-level interrupts (using OR-masks) */
+    /* Enable GPIO-level interrupts (OR-mask logic)
+    *  bitwise-OR is used to avoid overwriting other bits
+    *  already set in the control registers. */
     GIER_SW  |= 0x80000000U;   // Global enable
     GIER_BTN |= 0x80000000U;
     IPIER_SW  |= 0x1U;         // Enable channel interrupt
@@ -195,7 +212,7 @@ void myISR_partB(void)
         xil_printf("[SW IRQ] SW=%s → LED=%s (MSB=%d)\r\n",
                    sw_str, led_str, (msb_index < 0 ? -1 : msb_index));
 
-        /* Acknowledge SW interrupt */
+        /* Acknowledge SW interrupt (device → INTC) */
         IPISR_SW = 0x1;
         IAR      = 0x1;
     }
@@ -232,3 +249,23 @@ static void to_bin4(unsigned int value, char out[5])
         out[3 - bit] = (value & (1U << bit)) ? '1' : '0';
     out[4] = '\0';
 }
+
+
+
+/***************************************************************
+ *  SYSTEM OPERATION SUMMARY
+ *  ------------------------------------------------------------
+ *  - INTC aggregates GPIO interrupt signals (IRQ0 and IRQ1)
+ *  - On SW change → LEDs display index of MSB switch ON
+ *  - On BTN press → LEDs are inverted with debounce
+ *  - UART prints binary trace for each event
+ ***************************************************************/
+
+/***************************************************************
+ *  TECHNICAL NOTES
+ *  ------------------------------------------------------------
+ *  • Register write order matters: device ack → INTC ack
+ *  • OR-masks allow enabling multiple sources without clearing
+ *  • All register accesses declared 'volatile' to ensure real I/O
+ *  • System serves interrupts asynchronously to main loop
+ ***************************************************************/

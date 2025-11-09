@@ -48,6 +48,15 @@ int main(void)
     init_platform();
     xil_printf("\r\n[Lab1 – Polling Basic] Starting switch-to-LED mirroring...\r\n");
 
+
+    /* UART Debug Insight:
+    * Output visible through RealTerm (Windows) or any serial terminal
+    * at 115200 baud, 8 data bits, no parity, 1 stop bit (8N1).
+    * Each switch change triggers a UART message showing the binary LED mapping.
+    */
+
+
+
     /* --- Configure GPIO directions and initialize LEDs --- */
     GpioInit();
 
@@ -59,7 +68,22 @@ int main(void)
      */
     while (1)
     {
-        /* Read the 4-bit switch value (mask lower nibble) */
+        /* NOTE ON 'volatile':
+         * The 'volatile' qualifier tells the compiler that the memory content
+         * may change independently from program control,
+         * preventing optimization that would cache register values.
+         */
+
+
+        /* ------------------------------------------------------------
+         * Read the 4-bit switch value (mask lower nibble)
+         * ------------------------------------------------------------
+         * The switches are memory-mapped to an AXI GPIO device.
+         * Each bit of the GPIO_DATA register represents one switch.
+         * The 'volatile' keyword ensures that the compiler performs
+         * an actual read from the hardware register at every iteration
+         * (no caching or optimization).
+         * ------------------------------------------------------------ */
         volatile unsigned int sw_value = *((volatile unsigned int*)(GPIO_SW_BASE)) & 0xF;// 'volatile' → always read actual HW register (no compiler caching)
 
         /* Update LEDs only on state change */
@@ -87,7 +111,9 @@ int main(void)
         usleep(5000);  // 5 ms delay (optional)
     }
 
-    /* Not reached (infinite loop), but included for completeness */
+    /* Not reached: the program runs indefinitely inside the main loop.
+    * Included for completeness and good practice when using Xilinx SDK.
+    * cleanup_platform() would de-initialize UART/caches if ever reached. */
     cleanup_platform();
     return 0;
 }
@@ -99,8 +125,18 @@ int main(void)
 
 /**
  * @brief Configure GPIO direction registers.
- *        Switches are inputs (TRI = 1), LEDs are outputs (TRI = 0).
+ *
+ * Each AXI GPIO has two main registers:
+ *   - DATA  (offset 0x0): read/write actual I/O state
+ *   - TRI   (offset 0x4): direction control bitmask
+ *       bit = 1 → input (Hi-Z)
+ *       bit = 0 → output (driven)
+ *
+ * The switches GPIO is configured as input (TRI=0xF)
+ * and the LED GPIO as output (TRI=0x0).
+ * All LEDs are initially turned off.
  */
+
 static void GpioInit(void)
 {
     /* Configure direction registers */
@@ -116,13 +152,30 @@ static void GpioInit(void)
 
 /**
  * @brief Update LEDs according to the 4-bit switch value.
- * @param sw_value  4-bit value read from the switch GPIO
+ *
+ * The LED controller exposes a 32-bit DATA register,
+ * but only the 4 least significant bits are connected
+ * to the board LEDs. Masking (sw_value & 0xF)
+ * prevents unintended writes to unused bits.
+ *
+ * Writing to this memory address causes immediate
+ * hardware-level change on the LED pins.
  */
+
 static void UpdateLeds(unsigned int sw_value)
 {
     *(volatile unsigned int*)(GPIO_LED_BASE) = sw_value & 0xF; // write 4 LSBs to LED register (volatile → ensure real HW write)
 }
 
+
+/***************************************************************
+ *  SYSTEM OPERATION SUMMARY
+ *  ------------------------------------------------------------
+ *  - The CPU polls GPIO_SW (input) continuously.
+ *  - A state change triggers UART feedback and LED update.
+ *  - Accesses are fully blocking and sequential.
+ *  - No interrupt controller (INTC) is used at this stage.
+ ***************************************************************/
 
 /***************************************************************
  *  TECHNICAL NOTES
