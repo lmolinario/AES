@@ -1424,3 +1424,72 @@ make: Nothing to be done for 'all'.
 13:01:11 **** Incremental Build of configuration Debug for project c_lab1_interrupt_part2 ****
 make all 
 make: Nothing to be done for 'all'.
+11:25:14 **** Auto Build of configuration Debug for project a_lab1_polling_basic ****
+make all 
+'Building file: ../src/main.c'
+'Invoking: MicroBlaze gcc compiler'
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/main.o" -I../../a_lab1_polling_basic_bsp/microblaze_0/include -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/main.d" -MT"src/main.o" -o "src/main.o" "../src/main.c"
+'Finished building: ../src/main.c'
+' '
+'Building target: a_lab1_polling_basic.elf'
+'Invoking: MicroBlaze gcc linker'
+mb-gcc -Wl,-T -Wl,../src/lscript.ld -L../../a_lab1_polling_basic_bsp/microblaze_0/lib -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -Wl,--gc-sections -o "a_lab1_polling_basic.elf"  ./src/main.o ./src/platform.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: a_lab1_polling_basic.elf'
+' '
+'Invoking: MicroBlaze Print Size'
+mb-size a_lab1_polling_basic.elf  |tee "a_lab1_polling_basic.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+   8412	    684	   3112	  12208	   2fb0	a_lab1_polling_basic.elf
+'Finished building: a_lab1_polling_basic.elf.size'
+' '
+11:25:20 **** Incremental Build of configuration Debug for project Lab_1 ****
+make all 
+make: Nothing to be done for 'all'.
+11:25:20 **** Incremental Build of configuration Debug for project a_lab1_polling_basic ****
+make all 
+make: Nothing to be done for 'all'.
+11:25:21 **** Incremental Build of configuration Debug for project b_lab1_interrupt_part1 ****
+make all 
+'Building file: ../src/main.c'
+'Invoking: MicroBlaze gcc compiler'
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/main.o" -I../../b_lab1_interrupt_part1_bsp/microblaze_0/include -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/main.d" -MT"src/main.o" -o "src/main.o" "../src/main.c"
+'Finished building: ../src/main.c'
+' '
+'Building target: b_lab1_interrupt_part1.elf'
+'Invoking: MicroBlaze gcc linker'
+mb-gcc -Wl,-T -Wl,../src/lscript.ld -L../../b_lab1_interrupt_part1_bsp/microblaze_0/lib -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -Wl,--gc-sections -o "b_lab1_interrupt_part1.elf"  ./src/main.o ./src/platform.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: b_lab1_interrupt_part1.elf'
+' '
+'Invoking: MicroBlaze Print Size'
+mb-size b_lab1_interrupt_part1.elf  |tee "b_lab1_interrupt_part1.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+   9372	    684	   3112	  13168	   3370	b_lab1_interrupt_part1.elf
+'Finished building: b_lab1_interrupt_part1.elf.size'
+' '
+11:25:22 **** Incremental Build of configuration Debug for project c_lab1_interrupt_part2 ****
+make all 
+'Building file: ../src/main.c'
+'Invoking: MicroBlaze gcc compiler'
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/main.o" -I../../c_lab1_interrupt_part2_bsp/microblaze_0/include -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/main.d" -MT"src/main.o" -o "src/main.o" "../src/main.c"
+'Finished building: ../src/main.c'
+' '
+'Building target: c_lab1_interrupt_part2.elf'
+'Invoking: MicroBlaze gcc linker'
+mb-gcc -Wl,-T -Wl,../src/lscript.ld -L../../c_lab1_interrupt_part2_bsp/microblaze_0/lib -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -Wl,--gc-sections -o "c_lab1_interrupt_part2.elf"  ./src/main.o ./src/platform.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: c_lab1_interrupt_part2.elf'
+' '
+'Invoking: MicroBlaze Print Size'
+mb-size c_lab1_interrupt_part2.elf  |tee "c_lab1_interrupt_part2.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+   9368	    684	   3108	  13160	   3368	c_lab1_interrupt_part2.elf
+'Finished building: c_lab1_interrupt_part2.elf.size'
+' '
+11:27:18 **** Incremental Build of configuration Debug for project a_lab1_polling_basic ****
+make all 
+make: Nothing to be done for 'all'.
+11:27:47 **** Incremental Build of configuration Debug for project b_lab1_interrupt_part1 ****
+make all 
+make: Nothing to be done for 'all'.
+11:28:37 **** Incremental Build of configuration Debug for project c_lab1_interrupt_part2 ****
+make all 
+make: Nothing to be done for 'all'.
