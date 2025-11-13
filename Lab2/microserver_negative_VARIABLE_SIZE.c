@@ -1,238 +1,342 @@
 /***************************************************************
- *  Lab 2 – UART Microserver (PPM Generic, Variable Size, Negative)
+ *  Lab 2 – UART Microserver (PPM Generic Parser + Negative)
  *  Board: Zynq / Zybo Z7 (PS UART)
  *
  *  Funzionamento:
  *  ------------------------------------------------------------
- *  - Riceve da UART un PPM "raw" P6 di qualunque dimensione.
- *  - Parsing completo dell’header:
- *        * P6
- *        * width, height (ASCII → int)
- *        * maxval (≤255)
- *        * gestione commenti '#'
- *        * gestione whitespace multiplo
- *  - Copia l’header originale byte-per-byte
- *  - Legge (width * height * 3) byte senza limiti predefiniti
- *  - Alloca memoria dinamica per l’immagine
- *  - Applica negativo:
- *        pixel_neg = maxval - pixel
- *  - Invia header + raster negativo
+ *  - Riceve da UART un file PPM in formato "raw" (P6).
+ *  - Effettua il parsing completo dell'header:
+ *        * magic number (P6)
+ *        * width, height
+ *        * maxval (≤ 255)
+ *        * commenti '#' e whitespace arbitrario
+ *  - Copia l'header esattamente come ricevuto in header_buf[]
+ *    (senza modificarlo).
+ *  - Legge il raster (width * height * 3 byte, RGB).
+ *  - Calcola l'immagine negativa in un buffer separato.
+ *        pixel_neg = maxval - pixel_orig
+ *  - Invia su UART:
+ *        1) header originale;
+ *        2) raster negativo.
  *
- *  NOTA:
+ *  Nota:
  *  ------------------------------------------------------------
- *  - Nessuna printf di debug (come richiesto).
- *  - Eseguibile per qualunque dimensione di immagine.
+ *  - Il buffer dei pixel è dimensionato per immagini fino a
+ *    MAX_WIDTH x MAX_HEIGHT. Il file ricevuto deve rientrare
+ *    in questi limiti.
  ***************************************************************/
 
 #include <stdint.h>
-#include <stdlib.h>
 #include <ctype.h>
 
 #include "platform.h"
-#include "xuartps.h"
 #include "xparameters.h"
+#include "xuartps.h"
 
 /* ============================================================
- * UART SETUP
+ *  CONFIGURAZIONE UART
  * ============================================================ */
-#define UART_ID     XPAR_PS7_UART_1_DEVICE_ID
-#define BAUD        115200
+/* Usa UART_DEVICE_ID definito in platform_config.h
+ * (così evitiamo il warning di redefinition).
+ */
+// #define UART_DEVICE_ID  XPAR_PS7_UART_1_DEVICE_ID
 
-static XUartPs uart;
-static u32 uart_base;
+#define UART_BAUDRATE   115200
 
-static int uart_init(void)
-{
-    XUartPs_Config *cfg = XUartPs_LookupConfig(UART_ID);
-    if (!cfg) return XST_FAILURE;
+static XUartPs UartInstance;
+static uint32_t UartBaseAddr;   // <- useremo SEMPRE questo
 
-    if (XUartPs_CfgInitialize(&uart, cfg, cfg->BaseAddress) != XST_SUCCESS)
+
+/* ============================================================
+ *  LIMITI IMMAGINE / BUFFER
+ * ============================================================ */
+#define MAX_WIDTH        128
+#define MAX_HEIGHT       128
+#define MAX_CHANNELS     3
+#define MAX_PIXELS       (MAX_WIDTH * MAX_HEIGHT)
+#define MAX_IMAGE_BYTES  (MAX_PIXELS * MAX_CHANNELS)
+
+/* Header PPM: di solito pochi byte, 256 è più che sufficiente */
+#define MAX_HEADER_BYTES 256
+
+/* Buffer globali */
+static uint8_t header_buf[MAX_HEADER_BYTES];
+static uint32_t header_len = 0;
+
+static uint8_t img_in[MAX_IMAGE_BYTES];
+static uint8_t img_out[MAX_IMAGE_BYTES];
+
+/* Flag: 0 = stiamo ancora leggendo l'header, 1 = header finito */
+static int header_done = 0;
+
+
+/* ============================================================
+ *  UART – Funzioni di supporto
+ * ============================================================ */
+
+/* Inizializzazione UART PS */
+static int uart_init(void) {
+    int Status;
+    XUartPs_Config *Config;
+
+    Config = XUartPs_LookupConfig(UART_DEVICE_ID);
+    if (Config == NULL) {
         return XST_FAILURE;
+    }
 
-    uart_base = cfg->BaseAddress;
-
-    if (XUartPs_SetBaudRate(&uart, BAUD) != XST_SUCCESS)
+    Status = XUartPs_CfgInitialize(&UartInstance, Config, Config->BaseAddress);
+    if (Status != XST_SUCCESS) {
         return XST_FAILURE;
+    }
+
+    /* Salviamo la base address in UartBaseAddr (NON uart_base) */
+    UartBaseAddr = Config->BaseAddress;
+
+    Status = XUartPs_SetBaudRate(&UartInstance, UART_BAUDRATE);
+    if (Status != XST_SUCCESS) {
+        return XST_FAILURE;
+    }
 
     return XST_SUCCESS;
 }
 
-static inline uint8_t rx_byte(void) {
-    return XUartPs_RecvByte(uart_base);
+/* Riceve un byte dalla UART (blocking). */
+static uint8_t uart_recv_byte(void) {
+    return XUartPs_RecvByte(UartBaseAddr);
 }
 
-static inline void tx_byte(uint8_t b) {
-    XUartPs_SendByte(uart_base, b);
+/* Invia un byte sulla UART. */
+static void uart_send_byte(uint8_t b) {
+    XUartPs_SendByte(UartBaseAddr, b);
 }
-
 
 
 /* ============================================================
- * HEADER PARSING (Generic P6)
- *  - salva ogni byte in header[]
- *  - restituisce token testuale (per width,height,maxval)
+ *  LETTURA STREAM + SALVATAGGIO HEADER
  * ============================================================ */
 
-static int read_token(char *tok, int max_len, uint8_t *header, int *header_len, int *header_done)
-{
-    int c, i = 0;
+/*
+ * read_stream_byte()
+ * ------------------
+ * Legge un byte dallo stream UART.
+ * Se header_done == 0, lo salva anche in header_buf[].
+ */
+static int read_stream_byte(void) {
+    uint8_t b = uart_recv_byte();
 
-    // Skip whitespace & comments
+    if (!header_done && header_len < MAX_HEADER_BYTES) {
+        header_buf[header_len++] = b;
+    }
+
+    return (int)b;
+}
+
+/*
+ * read_token()
+ * ------------
+ * Legge un "token" ASCII dall'header PPM:
+ *   - salta whitespace e commenti '# ... \n'
+ *   - accumula caratteri non whitespace nel buffer 'token'
+ *   - termina il token su whitespace o inizio commento
+ *
+ * Tutti i byte letti passano da read_stream_byte(), quindi
+ * vengono copiati nell'header finché header_done == 0.
+ */
+static void read_token(char *token, int max_len) {
+    int c;
+    int i = 0;
+
+    /* 1) Salta whitespace e commenti, ma copiandoli nel header_buf */
     while (1) {
-
-        c = rx_byte();
-
-        if (!(*header_done))
-            header[(*header_len)++] = (uint8_t)c;
+        c = read_stream_byte();
 
         if (c == '#') {
-            // consume comment
+            /* Commento: leggi fino a fine riga (inclusa) */
             do {
-                c = rx_byte();
-                if (!(*header_done))
-                    header[(*header_len)++] = (uint8_t)c;
+                c = read_stream_byte();
             } while (c != '\n' && c != '\r');
+            /* ricomincia il ciclo: potremmo avere altro whitespace */
             continue;
         }
 
-        if (!isspace(c))
-            break;
-    }
-
-    tok[i++] = (char)c;
-
-    while (i < max_len - 1) {
-
-        c = rx_byte();
-
-        if (!(*header_done))
-            header[(*header_len)++] = (uint8_t)c;
-
-        if (isspace(c) || c == '#') {
-
-            if (c == '#') {
-                do {
-                    c = rx_byte();
-                    if (!(*header_done))
-                        header[(*header_len)++] = (uint8_t)c;
-                } while (c != '\n' && c != '\r');
-            }
-
+        if (!isspace(c)) {
+            /* Primo carattere non whitespace/non-commento */
             break;
         }
-
-        tok[i++] = (char)c;
     }
 
-    tok[i] = '\0';
-    return i;
+    /* 2) Primo carattere del token */
+    if (i < max_len - 1) {
+        token[i++] = (char)c;
+    }
+
+    /* 3) Continua a leggere caratteri del token */
+    while (i < max_len - 1) {
+        c = read_stream_byte();
+
+        if (isspace(c) || c == '#') {
+            /* Separatore di token trovato */
+
+            if (c == '#') {
+                /* Se è un commento, consumalo fino a fine linea */
+                do {
+                    c = read_stream_byte();
+                } while (c != '\n' && c != '\r');
+            }
+            break;  /* Token terminato */
+        }
+
+        token[i++] = (char)c;
+    }
+
+    token[i] = '\0';
 }
 
-/* Conversione ASCII → int (Lab TIP: digit = byte-48) */
-static int ascii_to_int(const char *s)
-{
-    int v = 0;
+/* Converte una stringa di cifre decimali in intero (>=0). */
+static uint32_t parse_uint(const char *s) {
+    uint32_t v = 0;
     while (*s >= '0' && *s <= '9') {
-        v = v * 10 + (*s - 48);   // TIP richiesto: ASCII '0' = 48
+        /* TIP del testo: '0'..'9' sono consecutivi in ASCII → *s - '0' */
+        uint32_t digit = (uint32_t)(*s - '0');
+        v = v * 10u + digit;
         s++;
     }
     return v;
 }
 
 
-
 /* ============================================================
- * NEGATIVE FILTER
+ *  NEGATIVE() – Elabora il raster
  * ============================================================ */
-static void negative(uint8_t *src, uint8_t *dst, int count, int maxval)
+
+/*
+ * negative()
+ * ----------
+ * src   : buffer di input (raster RGB)
+ * dst   : buffer di output (stessa dimensione)
+ * count : numero di byte nel raster
+ * maxval: valore massimo di intensità (Header PPM)
+ *
+ * Per ogni byte: dst[i] = maxval - src[i]
+ */
+static void negative(const uint8_t *src,
+                     uint8_t *dst,
+                     uint32_t count,
+                     uint32_t maxval)
 {
-    for (int i = 0; i < count; i++) {
-        uint8_t p = src[i];
-        if (p > maxval) p = maxval;     // clamp di sicurezza
-        dst[i] = (uint8_t)(maxval - p);
+    uint32_t i;
+
+    if (maxval == 0) {
+        /* Caso patologico: copiamo e basta */
+        for (i = 0; i < count; ++i) {
+            dst[i] = src[i];
+        }
+        return;
+    }
+
+    for (i = 0; i < count; ++i) {
+        uint32_t v = (uint32_t)src[i];
+        if (v > maxval) {
+            v = maxval; /* clamp di sicurezza */
+        }
+        dst[i] = (uint8_t)(maxval - v);
     }
 }
 
 
-
 /* ============================================================
- *  MICROSERVER – SINGLE IMAGE PROCESSING
+ *  PPM MICROSERVER – PARSING + ELABORAZIONE
  * ============================================================ */
 
-static void ppm_microserver_once(void)
-{
-    char tok[64];
+static void ppm_microserver_once(void) {
+    char token[64];
+    uint32_t width, height, maxval;
+    uint32_t num_pixels, num_bytes;
+    uint32_t i;
 
-    uint8_t header[512];
-    int header_len = 0;
-    int header_done = 0;
+    header_len  = 0;
+    header_done = 0;
 
-    int width, height, maxval;
+    /* 1) Leggi magic number (es. "P6") */
+    read_token(token, sizeof(token));
+    /* (opzionale) controllo: ci aspettiamo 'P' '6' */
+    /* if (token[0] != 'P' || token[1] != '6') { ... } */
 
-    /* Magic number */
-    read_token(tok, 64, header, &header_len, &header_done); // P6
+    /* 2) width */
+    read_token(token, sizeof(token));
+    width = parse_uint(token);
 
-    /* Width */
-    read_token(tok, 64, header, &header_len, &header_done);
-    width = ascii_to_int(tok);
+    /* 3) height */
+    read_token(token, sizeof(token));
+    height = parse_uint(token);
 
-    /* Height */
-    read_token(tok, 64, header, &header_len, &header_done);
-    height = ascii_to_int(tok);
+    /* 4) maxval */
+    read_token(token, sizeof(token));
+    maxval = parse_uint(token);
 
-    /* Maxval */
-    read_token(tok, 64, header, &header_len, &header_done);
-    maxval = ascii_to_int(tok);
-
-    /* Header finito */
+    /* Dopo aver letto maxval (e il suo separatore), l'header è finito */
     header_done = 1;
 
-    /* Calcolo numero di byte dell’immagine */
-    int total = width * height * 3;
+    /* 5) Limiti di sicurezza sul buffer (gestione “variable size”) */
+    num_pixels = width * height;
+    num_bytes  = num_pixels * MAX_CHANNELS;
 
-    /* Allocazione dinamica buffer */
-    uint8_t *img_in  = malloc(total);
-    uint8_t *img_out = malloc(total);
+    if (num_bytes > MAX_IMAGE_BYTES) {
+        num_bytes = MAX_IMAGE_BYTES;  /* clamp di sicurezza */
+    }
 
-    if (!img_in || !img_out)
-        while(1);   // fail
+    if (maxval > 255) {
+        maxval = 255; /* supportiamo solo 1 byte per canale */
+    }
 
-    /* Lettura raster */
-    for (int i = 0; i < total; i++)
-        img_in[i] = rx_byte();
+    /* 6) Leggi il raster (solo parte che entra nel buffer) */
+    for (i = 0; i < num_bytes; ++i) {
+        img_in[i] = uart_recv_byte();     /* da qui in poi NON scriviamo più nell'header */
+    }
 
-    /* Elaborazione */
-    negative(img_in, img_out, total, maxval);
+    /* Se lo stream contiene più byte (immagine più grande), andrebbero eventualmente
+       scartati leggendo e ignorando i byte rimanenti. */
 
-    /* Invio header identico */
-    for (int i = 0; i < header_len; i++)
-        tx_byte(header[i]);
+    /* 7) Calcola negativo in un buffer separato */
+    negative(img_in, img_out, num_bytes, maxval);
 
-    /* Invio immagine negativa */
-    for (int i = 0; i < total; i++)
-        tx_byte(img_out[i]);
+    /* 8) Invia header originale così come ricevuto */
+    for (i = 0; i < header_len; ++i) {
+        uart_send_byte(header_buf[i]);
+    }
 
-    free(img_in);
-    free(img_out);
+    /* 9) Invia raster elaborato */
+    for (i = 0; i < num_bytes; ++i) {
+        uart_send_byte(img_out[i]);
+    }
 }
 
 
-
 /* ============================================================
- * MAIN
+ *  MAIN
  * ============================================================ */
-int main(void)
-{
+
+int main(void) {
+    int Status;
+
     init_platform();
 
-    if (uart_init() != XST_SUCCESS)
-        while(1);
+    Status = uart_init();
+    if (Status != XST_SUCCESS) {
+        while (1) {
+            /* errore UART: loop di sicurezza */
+        }
+    }
 
-    /* Elabora una sola immagine */
+    /* Esegui una singola sessione PPM (un'immagine) */
     ppm_microserver_once();
 
-    /* Rimani vivo */
-    while (1);
+    /* Mantieni il programma attivo (opzionale) */
+    while (1) {
+        /* Per gestire più immagini in sequenza potresti fare:
+         * ppm_microserver_once();
+         */
+    }
 
     return 0;
 }
