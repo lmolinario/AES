@@ -11,14 +11,14 @@
 
 ---
 
-## 📘 Overview
+## Overview
 
 This repository contains all laboratory assignments developed for the **Advanced Embedded Systems** course at the *University of Cagliari*.
 Each lab focuses on hands-on embedded programming for the **MicroBlaze soft-core processor** implemented on the **Zybo Z7 FPGA board**, with emphasis on real hardware control, AXI peripherals, and interrupt handling.
 
 ---
 
-### 📸 Zybo Z7 Development Board 
+### Zybo Z7 Development Board 
 
 <p align="center">
   <img src="img/Zybo.png" alt="Zybo Z7 board used in the labs" width="650"/>
@@ -28,7 +28,7 @@ Each lab focuses on hands-on embedded programming for the **MicroBlaze soft-core
 
 ---
 
-## 🧩 Labs Summary
+## Labs Summary
 
 | Lab       | Title                    | Description                                                                                                                                                                                                                                                                  |
 | --------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
