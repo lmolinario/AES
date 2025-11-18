@@ -49,6 +49,13 @@ AES Labs/
 │   ├── c_lab1_interrupt_part2.c
 │   ├── AES/                     → Full Xilinx SDK 2019.1 workspace
 │   └── README.md                → Lab 1 documentation
+│ 
+├── Lab 2/
+│   ├── main_negative.c
+│   ├── main_hist_stretch.c
+│   ├── main_hist_equalization.c
+│   ├── AES/                     → Full Xilinx SDK 2019.1 workspace
+│   └── README.md                → Lab 2 documentation
 │
 └── README.md                    → Root documentation (this file)
 ```
