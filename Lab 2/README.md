@@ -5,7 +5,7 @@
 ## Instructions
 
 This assignment is related to Lab 2 on the UART microserver.  
-Please prepare the following code versions:
+Students must prepare the following code versions:
 
 - **Negative**
 - **Histogram stretching** (with arbitrary image size)
@@ -75,7 +75,11 @@ Compatible with:
 
 ```
 
-Lab2_UART/
+Lab 2/
+│
+├── main_negative.c                     → Negative transformation
+├── main_hist_stretch.c                 → Linear histogram stretching
+├── main_hist_equalization.c            → Global histogram equalization (bonus)
 │
 ├── AES/                                → Full Xilinx SDK 2019.1 workspace
 │   ├── lab2_negative/                  → SDK project (Negative transformation)
@@ -85,21 +89,14 @@ Lab2_UART/
 │   ├── design_1_wrapper_hw_platform_0/ → Exported Vivado hardware platform (.hdf)
 │   └── SDK.log                         → Build/debug session log
 │
-├── main_negative.c                     → Negative transformation
-├── main_hist_stretch.c                 → Linear histogram stretching
-├── main_hist_equalization.c            → Global histogram equalization (bonus)
+├── test_images/
+│   ├── input_128x128.ppm
+│   └── output_examples/
 │
-└── README.md                           → Lab documentation
+├── README.md
+
 
 ```
-
-Each folder contains:
-
-- A **clean and documented** C source file.
-- Ready-to-compile code for Xilinx SDK / Vitis.
-- UART I/O and PPM parsing implemented directly on PS UART1.
-
----
 
 ## Implementations Summary
 
@@ -113,12 +110,6 @@ p_out = 255 - p_in
 
 ```
 
-**Features**
-
-- Supports arbitrary image sizes  
-- Works on all RGB channels  
-- Header preserved exactly as received  
-- Minimal and efficient transformation  
 
 **Example**
 
@@ -140,12 +131,6 @@ p_out = (p - I_min) * 255 / (I_max - I_min)
 
 ```
 
-**Features**
-
-- Automatic dynamic-range detection  
-- Enhances low-contrast images  
-- Fully compatible with arbitrary resolution  
-- Handles flat images safely  
 
 Example: values in `[40..190]` → mapped into `[0..255]`.
 
@@ -168,12 +153,6 @@ map[i] = round((CDF[i] - CDF_min) / (N - CDF_min) * 255)
 ```
 
 4. Apply mapping  
-
-**Features**
-
-- Strong contrast enhancement  
-- CDF-based dynamic remapping  
-- Efficient on the Zybo  
 
 ---
 
@@ -209,7 +188,7 @@ display out.ppm
 
 - UART communication is blocking for reliability  
 - Pixel buffer is allocated dynamically  
-- Processing is performed *in-place*  
+- Processing is performed in-place for efficiency (all transformations operate directly on the pixel buffer).
 - Header is retransmitted **unchanged**  
 
 ---
