@@ -7,7 +7,7 @@
  *
  *  Description
  *  ------------------------------------------------------------
- *  UART-based microserver running on the Zybo Z7 (ARM PS UART1).
+ *  UART-based microserver running on the Zybo Z7.
  *  The server receives a PPM (P6) image over UART, performs
  *  linear histogram stretching on all RGB channels, and sends
  *  the processed image back to the client.
