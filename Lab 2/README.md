@@ -7,7 +7,7 @@
 This assignment is related to Lab 2 on the UART microserver.  
 Students must prepare the following code versions:
 
-- **Negative**
+- **Negative** (with fixed image size)
 - **Histogram stretching** (with arbitrary image size)
 - **Any optional code** you have implemented (bonus)
 
