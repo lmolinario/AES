@@ -1,0 +1,128 @@
+/***************************************************************
+ *  Lab 2 – UART Microserver (Negative Version)
+ *  Author: Lello Molinario
+ *  University of Cagliari – Advanced Embedded Systems (AES)
+ *  Student ID: 70/90/000369
+ *  Date: November 2025
+ *
+ *  Description:
+ *  ------------------------------------------------------------
+ *  Microserver UART che riceve una PPM (P6), applica il negativo
+ *  a ciascun byte RGB (p_out = 255 - p_in) e restituisce
+ *  l’immagine elaborata al client tramite lo stesso UART.
+ *
+ *  Note:
+ *   • Nessun xil_printf: lo stream deve contenere solo PPM.
+ *   • Accesso diretto alla UART tramite UART_BASE.
+ *   • Codice minimalista per garantire compatibilità RealTerm.
+ ***************************************************************/
+
+#include <stdio.h>
+#include "platform.h"
+#include "xil_printf.h"
+#include "xuartps.h"
+#include "stdlib.h"
+
+#define UART_BASE XPAR_PS7_UART_1_BASEADDR   // ⚠️ nessun commento qui
+
+/* Legge una riga dalla UART fino a '\n' */
+int read_line(char *buf, int maxlen) {
+    int i = 0;
+    char c;
+    while (i < maxlen-1) {
+        c = XUartPs_RecvByte(UART_BASE);
+        buf[i++] = c;
+        if (c == '\n') break;
+    }
+    buf[i] = 0;
+    return i;
+}
+
+/* Conversione ASCII → int (minimale) */
+int to_int(char *s) {
+    int n = 0;
+    int i = 0;
+    while (s[i] >= '0' && s[i] <= '9') {
+        n = n*10 + (s[i] - '0');
+        i++;
+    }
+    return n;
+}
+
+int main()
+{
+    init_platform();
+
+    /* Inizializzazione UART */
+    XUartPs Uart_1_PS;
+    u16 DeviceId_1= XPAR_PS7_UART_1_DEVICE_ID;
+    int Status_1;
+    XUartPs_Config *Config_1;
+
+    Config_1 = XUartPs_LookupConfig(DeviceId_1);
+    if (NULL == Config_1) return XST_FAILURE;
+
+    Status_1 = XUartPs_CfgInitialize(&Uart_1_PS, Config_1, Config_1->BaseAddress);
+    if (Status_1 != XST_SUCCESS) return XST_FAILURE;
+
+    u32 BaudRate = (u32)115200;
+    Status_1 = XUartPs_SetBaudRate(&Uart_1_PS, BaudRate);
+    if (Status_1 != (s32)XST_SUCCESS) return XST_FAILURE;
+
+    /* Lettura header PPM */
+    char line1[32], line2[32], line3[32];
+
+    read_line(line1, 32);     // es: "P6\n"
+    read_line(line2, 32);     // es: "128 128\n"
+    read_line(line3, 32);     // es: "255\n"
+
+    /* Parsing dimensioni */
+    int width = 0, height = 0;
+    int i = 0;
+
+    while (line2[i] >= '0' && line2[i] <= '9')
+        width = width*10 + (line2[i++] - '0');
+
+    i++; // spazio
+
+    while (line2[i] >= '0' && line2[i] <= '9')
+        height = height*10 + (line2[i++] - '0');
+
+    int maxval = to_int(line3);   // atteso: 255
+    (void)maxval;
+
+    int num_pixels = width * height * 3;
+
+    /* Allocazione buffer */
+    u8 *image = malloc(num_pixels);
+    if (!image) {
+        cleanup_platform();
+        return XST_FAILURE;
+    }
+
+    /* Lettura pixel RAW */
+    for (int i = 0; i < num_pixels; i++)
+        image[i] = XUartPs_RecvByte(UART_BASE);
+
+    /* Negativo */
+    for (int i = 0; i < num_pixels; i++)
+        image[i] = 255 - image[i];
+
+    /* Rinvia header */
+    for (int i = 0; line1[i]; i++)
+        XUartPs_SendByte(UART_BASE, line1[i]);
+
+    for (int i = 0; line2[i]; i++)
+        XUartPs_SendByte(UART_BASE, line2[i]);
+
+    for (int i = 0; line3[i]; i++)
+        XUartPs_SendByte(UART_BASE, line3[i]);
+
+    /* Rinvia pixel */
+    for (int i = 0; i < num_pixels; i++)
+        XUartPs_SendByte(UART_BASE, image[i]);
+
+    free(image);
+    cleanup_platform();
+    return 0;
+}

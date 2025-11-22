@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;lab2_hist_stretch/src/helloworld.c&apos; to &apos;main_hist_stretch.c&apos;" description="Rename resource &apos;helloworld.c&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="src/helloworld.c" name="main_hist_stretch.c" stamp="1763833535373" updateReferences="true"/>
+</session>

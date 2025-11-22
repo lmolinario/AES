@@ -1,0 +1,205 @@
+/***************************************************************
+ *  Lab 2 – UART Microserver (Negative Version)
+ *  Author: Lello Molinario
+ *  University of Cagliari – Advanced Embedded Systems (AES)
+ *  Student ID: 70/90/000369
+ *  Date: November 2025
+ *
+ *  Description
+ *  ------------------------------------------------------------
+ *  UART-based microserver running on the Zybo Z7 board.
+ *  The PC sends a PPM (P6) image over UART; the board receives
+ *  the header and raw RGB bytes, computes the negative of every
+ *  pixel (p_out = 255 - p_in), and returns the processed PPM
+ *  back over the same UART channel.
+ *
+ *  Supported PPM Format:
+ *    • Magic number: "P6"
+ *    • Resolution:   <width> <height>
+ *    • Maxval:       255
+ *    • Pixel data:   width * height * 3 bytes (RGB)
+ *
+ *  Protocol Summary
+ *  ------------------------------------------------------------
+ *  1) Client → Board:
+ *        "P6\n"
+ *        "<width> <height>\n"
+ *        "255\n"
+ *        <raw RGB bytes>
+ *
+ *  2) Board:
+ *        - reads header lines (ASCII)
+ *        - parses width/height/maxval
+ *        - receives raw RGB pixel stream
+ *        - applies negative filter
+ *        - sends back the same header
+ *        - sends back the processed RGB data
+ *
+ *  3) Client:
+ *        receives a valid PPM image to display with a viewer.
+ *
+ ***************************************************************/
+
+#include <stdio.h>
+#include "platform.h"
+#include "xil_printf.h"
+#include "xuartps.h"
+#include "stdlib.h"
+
+#define UART_BASE XPAR_PS7_UART_1_BASEADDR   // base address for PS UART1
+
+
+/***************************************************************
+ *  read_line()
+ *  ------------------------------------------------------------
+ *  Reads characters from UART until '\n' is encountered,
+ *  or until maxlen - 1 characters have been stored.
+ *
+ *  The resulting string is NULL-terminated.
+ ***************************************************************/
+int read_line(char *buf, int maxlen) {
+    int i = 0;
+    char c;
+
+    while (i < maxlen - 1) {
+        c = XUartPs_RecvByte(UART_BASE);   // blocking receive
+        buf[i++] = c;
+        if (c == '\n')                     // end of textual line
+            break;
+    }
+
+    buf[i] = 0;    // end string
+    return i;
+}
+
+
+/***************************************************************
+ *  to_int()
+ *  ------------------------------------------------------------
+ *  Converts an ASCII numeric string to integer.
+ *  Stops parsing at the first non-digit character.
+ ***************************************************************/
+int to_int(char *s) {
+    int value = 0;
+    int i = 0;
+
+    while (s[i] >= '0' && s[i] <= '9') {
+        value = value * 10 + (s[i] - '0');
+        i++;
+    }
+
+    return value;
+}
+
+
+/***************************************************************
+ *  main()
+ *  ------------------------------------------------------------
+ *  Implements the UART PPM microserver:
+ *  - init UART
+ *  - read header
+ *  - read pixel data
+ *  - apply negative transform
+ *  - send header back
+ *  - send processed pixel buffer
+ ***************************************************************/
+int main()
+{
+    init_platform();
+
+    /***********************************************************
+     *  UART initialization (PS UART1 @ 115200 baud)
+     **********************************************************/
+    XUartPs Uart_1_PS;
+    u16 DeviceId_1 = XPAR_PS7_UART_1_DEVICE_ID;
+    int Status_1;
+    XUartPs_Config *Config_1;
+
+    Config_1 = XUartPs_LookupConfig(DeviceId_1);
+    if (Config_1 == NULL) return XST_FAILURE;
+
+    Status_1 = XUartPs_CfgInitialize(&Uart_1_PS,
+                                     Config_1,
+                                     Config_1->BaseAddress);
+    if (Status_1 != XST_SUCCESS) return XST_FAILURE;
+
+    Status_1 = XUartPs_SetBaudRate(&Uart_1_PS, 115200);
+    if (Status_1 != XST_SUCCESS) return XST_FAILURE;
+
+    /***********************************************************
+     *  1) Read PPM header (3 lines)
+     **********************************************************/
+    char line1[32], line2[32], line3[32];
+
+    read_line(line1, 32);   // e.g., "P6\n"
+    read_line(line2, 32);   // e.g., "128 128\n"
+    read_line(line3, 32);   // e.g., "255\n"
+
+    /***********************************************************
+     *  2) Parse width and height from ASCII line2
+     **********************************************************/
+    int width = 0, height = 0;
+    int i = 0;
+
+    // parse width
+    while (line2[i] >= '0' && line2[i] <= '9') {
+        width = width * 10 + (line2[i] - '0');
+        i++;
+    }
+
+    i++;   // skip the space ' '
+
+    // parse height
+    while (line2[i] >= '0' && line2[i] <= '9') {
+        height = height * 10 + (line2[i] - '0');
+        i++;
+    }
+
+    int maxval = to_int(line3);   // expected: 255
+    (void)maxval;                 // unused but kept for clarity
+
+    int num_pixels = width * height * 3;
+
+    /***********************************************************
+     *  3) Allocate buffer for RGB pixels
+     **********************************************************/
+    u8 *image = malloc(num_pixels);
+    if (!image) {
+        cleanup_platform();
+        return XST_FAILURE;
+    }
+
+    /***********************************************************
+     *  4) Receive raw RGB bytes from UART
+     **********************************************************/
+    for (int i = 0; i < num_pixels; i++)
+        image[i] = XUartPs_RecvByte(UART_BASE);
+
+    /***********************************************************
+     *  5) Apply negative transformation
+     **********************************************************/
+    for (int i = 0; i < num_pixels; i++)
+        image[i] = 255 - image[i];
+
+    /***********************************************************
+     *  6) Send original PPM header back
+     **********************************************************/
+    for (int i = 0; line1[i] != 0; i++)
+        XUartPs_SendByte(UART_BASE, line1[i]);
+
+    for (int i = 0; line2[i] != 0; i++)
+        XUartPs_SendByte(UART_BASE, line2[i]);
+
+    for (int i = 0; line3[i] != 0; i++)
+        XUartPs_SendByte(UART_BASE, line3[i]);
+
+    /***********************************************************
+     *  7) Send processed image bytes
+     **********************************************************/
+    for (int i = 0; i < num_pixels; i++)
+        XUartPs_SendByte(UART_BASE, image[i]);
+
+    free(image);
+    cleanup_platform();
+    return 0;
+}

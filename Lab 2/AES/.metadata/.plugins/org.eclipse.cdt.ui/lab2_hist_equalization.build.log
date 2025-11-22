@@ -1,0 +1,8 @@
+19:24:35 **** Incremental Build of configuration Debug for project lab2_hist_equalization ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+
+19:24:35 Build Finished (took 317ms)
+
