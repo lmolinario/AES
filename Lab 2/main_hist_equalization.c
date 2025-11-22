@@ -1,5 +1,5 @@
 /***************************************************************
- *  Lab 2 – UART Microserver (Histogram Equalization – Bonus)
+ *  Lab 2 – UART Microserver (Histogram Equalization)
  *  Author: Lello Molinario
  *  University of Cagliari – Advanced Embedded Systems (AES)
  *  Student ID: 70/90/000369
@@ -8,209 +8,127 @@
  *  Description
  *  ------------------------------------------------------------
  *  UART-based microserver running on the Zybo Z7.
- *  The server receives a PPM (P6) image over UART, applies
- *  global histogram equalization on all RGB channels (byte-wise),
- *  and sends the processed image back to the client.
+ *  The server receives a PPM (P6) image of arbitrary size over
+ *  UART, performs histogram equalization on all RGB bytes, and
+ *  sends the processed PPM image back to the client.
+ *
+ *  Histogram Equalization (8-bit RGB):
+ *    1) Build histogram over 256 intensity levels
+ *    2) Compute cumulative distribution function (CDF)
+ *    3) Identify smallest non-zero CDF value (cdf_min)
+ *    4) Compute mapping:
+ *         map[i] = round( (CDF[i] - cdf_min) / (N - cdf_min) * 255 )
+ *    5) Apply mapping to each pixel
  *
  *  Supported PPM format:
  *   • P6 (binary)
  *   • Arbitrary image size (width × height)
  *   • 1-byte RGB channels (maxval = 255)
  *
- *  Histogram Equalization (simplified):
- *   1. Build histogram over 256 intensity levels [0..255]
- *   2. Compute cumulative distribution function (CDF)
- *   3. Find smallest non-zero CDF (cdf_min)
- *   4. Build mapping:
- *        map[i] = round( (CDF[i] − cdf_min) / (N − cdf_min) * maxval )
- *   5. Remap each pixel via map[]
+ *  Communication protocol:
+ *   1. Client sends 3 header lines:
+ *        - "P6"
+ *        - "<width> <height>"
+ *        - "255"
+ *   2. Client sends raw RGB data (width × height × 3 bytes)
+ *   3. Microserver applies Histogram Equalization
+ *   4. Microserver responds with:
+ *        - Same header (3 lines)
+ *        - Processed RGB data
+ *
+ *  Platform
+ *  ------------------------------------------------------------
+ *   • Hardware: Zybo Z7 board (ARM Cortex-A9 – PS7)
+ *   • UART: PS UART1 @ 115200 baud, 8N1
+ *   • Tools: Xilinx SDK / Vitis + RealTerm (Windows) or gtkterm (Linux)
  *
  ***************************************************************/
 
+
+// Standard C and Xilinx libraries
 #include <stdio.h>
-#include <stdlib.h>
 #include "platform.h"
 #include "xil_printf.h"
 #include "xuartps.h"
+#include "stdlib.h"
 
-#define UART_BASE   XPAR_PS7_UART_1_BASEADDR
-#define UART_DEVICE XPAR_PS7_UART_1_DEVICE_ID
+#define UART_BASE XPAR_PS7_UART_1_BASEADDR
 
-typedef struct {
-    int width;
-    int height;
-    int maxval;
-} PpmHeader;
-
-static XUartPs UartPs_1;
-
-/* ---------------- UART utilities ---------------- */
-
-static int uart_init(void)
-{
-    XUartPs_Config *Config;
-    int Status;
-
-    Config = XUartPs_LookupConfig(UART_DEVICE);
-    if (Config == NULL) {
-        xil_printf("ERROR: UART config not found\r\n");
-        return XST_FAILURE;
-    }
-
-    Status = XUartPs_CfgInitialize(&UartPs_1, Config, Config->BaseAddress);
-    if (Status != XST_SUCCESS) {
-        xil_printf("ERROR: UART init failed\r\n");
-        return XST_FAILURE;
-    }
-
-    Status = XUartPs_SetBaudRate(&UartPs_1, 115200);
-    if (Status != XST_SUCCESS) {
-        xil_printf("ERROR: UART set baudrate failed\r\n");
-        return XST_FAILURE;
-    }
-
-    return XST_SUCCESS;
-}
-
-static u8 uart_recv_byte(void)
-{
-    return XUartPs_RecvByte(UART_BASE);
-}
-
-static void uart_send_byte(u8 c)
-{
-    XUartPs_SendByte(UART_BASE, c);
-}
-
-/* ---------------- ASCII parsing helpers ---------------- */
-
-static int read_line(char *buf, int maxlen)
-{
+/***************************************************************
+ *  read_line()
+ *  ------------------------------------------------------------
+ *  Reads characters from UART until '\n' is encountered,
+ *  or until maxlen - 1 characters have been stored.
+ *
+ *  The resulting string is NULL-terminated.
+ ***************************************************************/
+int read_line(char *buf, int maxlen) {
     int i = 0;
     char c;
-
-    while (i < maxlen - 1) {
-        c = (char)uart_recv_byte();
+    while (i < maxlen-1) {
+        c = XUartPs_RecvByte(UART_BASE); // blocking receive
         buf[i++] = c;
-        if (c == '\n') break;
+        if (c == '\n') // end of textual line
+        break;
     }
-    buf[i] = '\0';
+    buf[i] = 0;// end string
     return i;
 }
 
-static int ascii_to_int(const char *s)
-{
-    int value = 0;
+/***************************************************************
+ *  to_int()
+ *  ------------------------------------------------------------
+ *  Converts an ASCII numeric string to integer.
+ *  Stops parsing at the first non-digit character.
+ ***************************************************************/
+int to_int(char *s) {
+    int n = 0;
     int i = 0;
-
     while (s[i] >= '0' && s[i] <= '9') {
-        value = value * 10 + (s[i] - '0');
+        n = n*10 + (s[i] - '0');
         i++;
     }
-    return value;
+    return n;
 }
 
-/* ---------------- PPM utilities ---------------- */
 
-static int ppm_read_header(PpmHeader *hdr,
-                           char *line_magic,
-                           char *line_dim,
-                           char *line_max,
-                           int   maxlen)
+/***************************************************************
+ *  apply_histogram_equalization()
+ *  ------------------------------------------------------------
+ *  Performs histogram equalization on the entire image buffer.
+ *
+ *  Steps:
+ *    1) Build histogram over 256 levels
+ *    2) Compute cumulative distribution function (CDF)
+ *    3) Find smallest non-zero CDF value (cdf_min)
+ *    4) Build mapping table:
+ *         map[i] = round( (CDF[i] - cdf_min) / (N - cdf_min) * 255 )
+ *    5) Apply mapping to all pixels
+ *
+ *  PARAMETERS:
+ *    - img : pointer to image buffer (RGB as flat array)
+ *    - n   : number of bytes (width * height * 3)
+ ***************************************************************/
+void apply_histogram_equalization(u8 *img, int n)
 {
-    read_line(line_magic, maxlen);
-    read_line(line_dim,   maxlen);
-    read_line(line_max,   maxlen);
-
-    int i = 0;
-    int width = 0;
-    int height = 0;
-
-    while (line_dim[i] >= '0' && line_dim[i] <= '9') {
-        width = width * 10 + (line_dim[i] - '0');
-        i++;
-    }
-
-    if (line_dim[i] == ' ') {
-        i++;
-    }
-
-    while (line_dim[i] >= '0' && line_dim[i] <= '9') {
-        height = height * 10 + (line_dim[i] - '0');
-        i++;
-    }
-
-    int maxval = ascii_to_int(line_max);
-
-    hdr->width  = width;
-    hdr->height = height;
-    hdr->maxval = maxval;
-
-    return 0;
-}
-
-static void ppm_read_pixels(u8 *buffer, int num_bytes)
-{
-    for (int i = 0; i < num_bytes; i++) {
-        buffer[i] = uart_recv_byte();
-    }
-}
-
-static void ppm_write_header(const char *line_magic,
-                             const char *line_dim,
-                             const char *line_max)
-{
-    int i = 0;
-
-    while (line_magic[i] != '\0') {
-        uart_send_byte((u8)line_magic[i++]);
-    }
-
-    i = 0;
-    while (line_dim[i] != '\0') {
-        uart_send_byte((u8)line_dim[i++]);
-    }
-
-    i = 0;
-    while (line_max[i] != '\0') {
-        uart_send_byte((u8)line_max[i++]);
-    }
-}
-
-static void ppm_write_pixels(const u8 *buffer, int num_bytes)
-{
-    for (int i = 0; i < num_bytes; i++) {
-        uart_send_byte(buffer[i]);
-    }
-}
-
-/* ---------------- Image processing: histogram equalization ---------------- */
-
-/**
- * Global histogram equalization on all bytes (RGB channels).
- * Uses a 256-bin histogram and CDF-based mapping.
- */
-static void image_hist_equalization(u8 *buffer, int num_bytes, int maxval)
-{
-    unsigned int hist[256] = {0};
-    unsigned int cdf[256]  = {0};
-    u8           map[256];
-
-    int N = num_bytes;  // total number of "pixels" (actually bytes)
+    int hist[256] = {0};
+    int cdf[256]  = {0};
+    u8  map[256];
 
     // 1) Histogram
-    for (int i = 0; i < num_bytes; i++) {
-        hist[buffer[i]]++;
-    }
+    for (int i = 0; i < n; i++)
+        hist[img[i]]++;
 
     // 2) CDF
     cdf[0] = hist[0];
-    for (int i = 1; i < 256; i++) {
+    for (int i = 1; i < 256; i++)
         cdf[i] = cdf[i - 1] + hist[i];
-    }
 
-    // 3) cdf_min (first non-zero)
-    unsigned int cdf_min = 0;
+    // Total number of pixels
+    int N = n;
+
+    // 3) Find cdf_min (first non-zero)
+    int cdf_min = 0;
     for (int i = 0; i < 256; i++) {
         if (cdf[i] != 0) {
             cdf_min = cdf[i];
@@ -218,65 +136,135 @@ static void image_hist_equalization(u8 *buffer, int num_bytes, int maxval)
         }
     }
 
-    if (cdf_min == 0 || N <= (int)cdf_min) {
-        // Pathological or flat image – nothing to do
+    // Avoid division by zero
+    if (cdf_min == N)
         return;
-    }
 
-    // 4) Build mapping
+    // 4) Build LUT
     for (int i = 0; i < 256; i++) {
-        float v = (float)(cdf[i] - cdf_min) / (float)(N - cdf_min);
-        if (v < 0.0f) v = 0.0f;
-        if (v > 1.0f) v = 1.0f;
-        map[i] = (u8)(v * (float)maxval + 0.5f);
+        float norm = (float)(cdf[i] - cdf_min) / (float)(N - cdf_min);
+        int val = (int)(norm * 255.0f);
+
+        if (val < 0)   val = 0;
+        if (val > 255) val = 255;
+
+        map[i] = (u8)val;
     }
 
-    // 5) Apply mapping in-place
-    for (int i = 0; i < num_bytes; i++) {
-        buffer[i] = map[buffer[i]];
-    }
+    // 5) Apply LUT to every pixel
+    for (int i = 0; i < n; i++)
+        img[i] = map[img[i]];
 }
 
-/* ---------------- main() ---------------- */
 
-int main(void)
+/***************************************************************
+ *  main()
+ *  ------------------------------------------------------------
+ *  Implements the UART PPM microserver:
+ *  - init UART
+ *  - read header
+ *  - read pixel data
+ *  - apply negative transform
+ *  - send header back
+ *  - send processed pixel buffer
+ ***************************************************************/
+
+int main()
 {
     init_platform();
-
-    if (uart_init() != XST_SUCCESS) {
-        xil_printf("FATAL: UART initialization failed\r\n");
-        cleanup_platform();
+     /***********************************************************
+     *  UART initialization (PS UART1 @ 115200 baud)
+     **********************************************************/
+    XUartPs Uart_1_PS;
+    u16 DeviceId_1= XPAR_PS7_UART_1_DEVICE_ID;
+    int Status_1;
+    XUartPs_Config *Config_1;
+    Config_1 = XUartPs_LookupConfig(DeviceId_1);
+    if (NULL == Config_1) {
+        return XST_FAILURE;
+    }
+    Status_1 = XUartPs_CfgInitialize(&Uart_1_PS, Config_1, Config_1->BaseAddress); //init  UART
+    if (Status_1 != XST_SUCCESS) {
+        return XST_FAILURE;
+    }
+    u32 BaudRate = (u32)115200;
+    Status_1 = XUartPs_SetBaudRate(&Uart_1_PS, BaudRate); //set the BaudRate = 115200
+    if (Status_1 != (s32)XST_SUCCESS) {
         return XST_FAILURE;
     }
 
-    xil_printf("Lab 2 – UART Microserver (Histogram Equalization – Bonus) started.\r\n");
+    /***********************************************************
+     * Read PPM header (3 lines)
+     **********************************************************/
 
-    PpmHeader hdr;
-    char line_magic[32];
-    char line_dim[32];
-    char line_max[32];
+    char line1[32], line2[32], line3[32];
 
-    ppm_read_header(&hdr, line_magic, line_dim, line_max, 32);
+    read_line(line1, 32);   // e.g., "P6\n"
+    read_line(line2, 32);   // e.g., "128 128\n"
+    read_line(line3, 32);   // e.g., "255\n"
 
-    int num_bytes = hdr.width * hdr.height * 3;
 
-    u8 *image = (u8 *)malloc(num_bytes);
-    if (image == NULL) {
-        xil_printf("ERROR: malloc failed (image buffer)\r\n");
-        cleanup_platform();
-        return XST_FAILURE;
+    /***********************************************************
+     * Parse width and height from ASCII line2
+     **********************************************************/
+    int width = 0, height = 0;
+    int i = 0;
+
+    // parse width
+    while (line2[i] >= '0' && line2[i] <= '9') {
+        width = width*10 + (line2[i] - '0');
+        i++;
     }
 
-    ppm_read_pixels(image, num_bytes);
+    i++;  // skip the space ' '
 
-    image_hist_equalization(image, num_bytes, hdr.maxval);
+    // parse height
+    while (line2[i] >= '0' && line2[i] <= '9') {
+        height = height*10 + (line2[i] - '0');
+        i++;
+    }
 
-    ppm_write_header(line_magic, line_dim, line_max);
-    ppm_write_pixels(image, num_bytes);
+    int maxval = to_int(line3); // expected: 255
 
-    free(image);
-    xil_printf("Lab 2 – Histogram Equalization Version completed.\r\n");
+    int num_pixels = width * height * 3;
 
-    cleanup_platform();
+     /***********************************************************
+     * Allocate buffer for RGB pixels
+     **********************************************************/
+
+    u8 *image = malloc(num_pixels);
+
+     /***********************************************************
+     *  Receive raw RGB bytes from UART
+     **********************************************************/
+    for (int i = 0; i < num_pixels; i++)
+        image[i] = XUartPs_RecvByte(UART_BASE);
+
+    /***********************************************************
+     * Apply histogram equalization
+     **********************************************************/
+     apply_histogram_equalization(image, num_pixels);
+
+    /***********************************************************
+     * Send original PPM header back
+     **********************************************************/
+    for (int i = 0; line1[i] != 0; i++)
+        XUartPs_SendByte(UART_BASE, line1[i]);
+
+    for (int i = 0; line2[i] != 0; i++)
+        XUartPs_SendByte(UART_BASE, line2[i]);
+
+    for (int i = 0; line3[i] != 0; i++)
+        XUartPs_SendByte(UART_BASE, line3[i]);
+
+     /***********************************************************
+     *  Send processed image bytes
+     **********************************************************/
+    for (int i = 0; i < num_pixels; i++)
+        XUartPs_SendByte(UART_BASE, image[i]);
+
+    free(image);          // Release dynamically allocated image buffer
+    cleanup_platform();    // Shut down Zybo platform and de-initialize drivers
+
     return 0;
 }
