@@ -44,13 +44,24 @@
 #include "xuartps.h"
 #include "stdlib.h"
 
+// Base address of PS UART1 used for all RX/TX operations
 #define UART_BASE XPAR_PS7_UART_1_BASEADDR
 
+// Fixed-size PPM header length for the 128×128 P6 image:
+// Expected format: "P6\n128 128\n255\n" → 15 bytes
 #define HEADER_SIZE 15 // Example: "P6\n128 128\n255\n"
+
+// Fixed image resolution (128×128 RGB)
 #define IMG_W 128
 #define IMG_H 128
+
+// Total number of bytes in the RGB image buffer:
+//   128 × 128 pixels × 3 (R,G,B) = 49 152 bytes
 #define PIXELS (IMG_W * IMG_H * 3)
 
+// Static buffers allocated in .bss:
+// • header[]  – stores the received PPM header (15 bytes)
+// • image[]   – stores the raw RGB data (49 152 bytes)
 u8 header[HEADER_SIZE];
 u8 image[PIXELS];
 
@@ -68,7 +79,6 @@ void apply_negative(u8 *img, int n) {
     for (int i = 0; i < n; i++)
         img[i] = 255 - img[i];
 }
-
 
 /***************************************************************
  *  main()

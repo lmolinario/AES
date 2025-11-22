@@ -43,7 +43,6 @@
  *
  ***************************************************************/
 
-
 // Standard C and Xilinx libraries
 #include <stdio.h>
 #include "platform.h"
@@ -51,6 +50,7 @@
 #include "xuartps.h"
 #include "stdlib.h"
 
+// Base address of PS UART1 used for all RX/TX operations
 #define UART_BASE XPAR_PS7_UART_1_BASEADDR
 
 /***************************************************************
@@ -89,7 +89,6 @@ int to_int(char *s) {
     }
     return n;
 }
-
 
 /***************************************************************
  *  apply_histogram_stretching()
@@ -131,7 +130,6 @@ void apply_histogram_stretching(u8 *img, int n) {
     }
 }
 
-
 /***************************************************************
  *  main()
  *  ------------------------------------------------------------
@@ -139,7 +137,7 @@ void apply_histogram_stretching(u8 *img, int n) {
  *  - init UART
  *  - read header
  *  - read pixel data
- *  - apply negative transform
+ *  - apply histogram stretching
  *  - send header back
  *  - send processed pixel buffer
  ***************************************************************/
@@ -168,9 +166,9 @@ int main()
         return XST_FAILURE;
     }
 
-    /***********************************************************
-     * Read PPM header (3 lines)
-     **********************************************************/
+   /***********************************************************
+    * Read PPM header (3 lines)
+    **********************************************************/
 
     char line1[32], line2[32], line3[32];
 
@@ -178,10 +176,9 @@ int main()
     read_line(line2, 32);   // e.g., "128 128\n"
     read_line(line3, 32);   // e.g., "255\n"
 
-
-    /***********************************************************
-     * Parse width and height from ASCII line2
-     **********************************************************/
+   /***********************************************************
+    * Parse width and height from ASCII line2
+    **********************************************************/
     int width = 0, height = 0;
     int i = 0;
 
@@ -203,27 +200,25 @@ int main()
 
     int num_pixels = width * height * 3;
 
-     /***********************************************************
-     * Allocate buffer for RGB pixels
-     **********************************************************/
-
+    /***********************************************************
+    * Allocate buffer for RGB pixels
+    **********************************************************/
     u8 *image = malloc(num_pixels);
 
-     /***********************************************************
-     *  Receive raw RGB bytes from UART
-     **********************************************************/
+    /***********************************************************
+    *  Receive raw RGB bytes from UART
+    **********************************************************/
     for (int i = 0; i < num_pixels; i++)
         image[i] = XUartPs_RecvByte(UART_BASE);
 
     /***********************************************************
-     * Apply negative transformation (external function)
-     **********************************************************/
-     apply_histogram_stretching(image, num_pixels);
+    * Apply histogram stretching
+    **********************************************************/
+    apply_histogram_stretching(image, num_pixels);
 
-
-    /***********************************************************
-     * Send original PPM header back
-     **********************************************************/
+   /***********************************************************
+    * Send original PPM header back
+    **********************************************************/
     for (int i = 0; line1[i] != 0; i++)
         XUartPs_SendByte(UART_BASE, line1[i]);
 

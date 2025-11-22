@@ -44,7 +44,6 @@
  *
  ***************************************************************/
 
-
 // Standard C and Xilinx libraries
 #include <stdio.h>
 #include "platform.h"
@@ -52,6 +51,7 @@
 #include "xuartps.h"
 #include "stdlib.h"
 
+// Base address of PS UART1 used for all RX/TX operations
 #define UART_BASE XPAR_PS7_UART_1_BASEADDR
 
 /***************************************************************
@@ -91,7 +91,6 @@ int to_int(char *s) {
     return n;
 }
 
-
 /***************************************************************
  *  apply_histogram_equalization()
  *  ------------------------------------------------------------
@@ -115,11 +114,11 @@ void apply_histogram_equalization(u8 *img, int n)
     int cdf[256]  = {0};
     u8  map[256];
 
-    // 1) Histogram
+    // Histogram
     for (int i = 0; i < n; i++)
         hist[img[i]]++;
 
-    // 2) CDF
+    // CDF
     cdf[0] = hist[0];
     for (int i = 1; i < 256; i++)
         cdf[i] = cdf[i - 1] + hist[i];
@@ -127,7 +126,7 @@ void apply_histogram_equalization(u8 *img, int n)
     // Total number of pixels
     int N = n;
 
-    // 3) Find cdf_min (first non-zero)
+    // Find cdf_min (first non-zero)
     int cdf_min = 0;
     for (int i = 0; i < 256; i++) {
         if (cdf[i] != 0) {
@@ -140,7 +139,7 @@ void apply_histogram_equalization(u8 *img, int n)
     if (cdf_min == N)
         return;
 
-    // 4) Build LUT
+    // Build LUT
     for (int i = 0; i < 256; i++) {
         float norm = (float)(cdf[i] - cdf_min) / (float)(N - cdf_min);
         int val = (int)(norm * 255.0f);
@@ -151,7 +150,7 @@ void apply_histogram_equalization(u8 *img, int n)
         map[i] = (u8)val;
     }
 
-    // 5) Apply LUT to every pixel
+    // Apply LUT to every pixel
     for (int i = 0; i < n; i++)
         img[i] = map[img[i]];
 }
@@ -164,7 +163,7 @@ void apply_histogram_equalization(u8 *img, int n)
  *  - init UART
  *  - read header
  *  - read pixel data
- *  - apply negative transform
+ *  - apply histogram equalization
  *  - send header back
  *  - send processed pixel buffer
  ***************************************************************/
@@ -172,9 +171,9 @@ void apply_histogram_equalization(u8 *img, int n)
 int main()
 {
     init_platform();
-     /***********************************************************
-     *  UART initialization (PS UART1 @ 115200 baud)
-     **********************************************************/
+    /***********************************************************
+    *  UART initialization (PS UART1 @ 115200 baud)
+    **********************************************************/
     XUartPs Uart_1_PS;
     u16 DeviceId_1= XPAR_PS7_UART_1_DEVICE_ID;
     int Status_1;
@@ -193,9 +192,9 @@ int main()
         return XST_FAILURE;
     }
 
-    /***********************************************************
-     * Read PPM header (3 lines)
-     **********************************************************/
+   /***********************************************************
+    * Read PPM header (3 lines)
+    **********************************************************/
 
     char line1[32], line2[32], line3[32];
 
@@ -204,9 +203,9 @@ int main()
     read_line(line3, 32);   // e.g., "255\n"
 
 
-    /***********************************************************
-     * Parse width and height from ASCII line2
-     **********************************************************/
+   /***********************************************************
+    * Parse width and height from ASCII line2
+    **********************************************************/
     int width = 0, height = 0;
     int i = 0;
 
@@ -228,15 +227,14 @@ int main()
 
     int num_pixels = width * height * 3;
 
-     /***********************************************************
-     * Allocate buffer for RGB pixels
-     **********************************************************/
-
+    /***********************************************************
+    * Allocate buffer for RGB pixels
+    **********************************************************/
     u8 *image = malloc(num_pixels);
 
-     /***********************************************************
-     *  Receive raw RGB bytes from UART
-     **********************************************************/
+    /***********************************************************
+    *  Receive raw RGB bytes from UART
+    **********************************************************/
     for (int i = 0; i < num_pixels; i++)
         image[i] = XUartPs_RecvByte(UART_BASE);
 
@@ -257,9 +255,9 @@ int main()
     for (int i = 0; line3[i] != 0; i++)
         XUartPs_SendByte(UART_BASE, line3[i]);
 
-     /***********************************************************
-     *  Send processed image bytes
-     **********************************************************/
+    /***********************************************************
+    *  Send processed image bytes
+    **********************************************************/
     for (int i = 0; i < num_pixels; i++)
         XUartPs_SendByte(UART_BASE, image[i]);
 
