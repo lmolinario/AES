@@ -1,5 +1,5 @@
 /***************************************************************
- *  Lab 2 – UART Microserver (Histogram Stretching Version)
+ *  Lab 2 – UART Microserver (Histogram Stretching)
  *  Author: Lello Molinario
  *  University of Cagliari – Advanced Embedded Systems (AES)
  *  Student ID: 70/90/000369
@@ -8,260 +8,239 @@
  *  Description
  *  ------------------------------------------------------------
  *  UART-based microserver running on the Zybo Z7.
- *  The server receives a PPM (P6) image over UART, performs
- *  linear histogram stretching on all RGB channels, and sends
- *  the processed image back to the client.
+ *  The server receives a PPM (P6) image of arbitrary size over
+ *  UART, performs linear histogram stretching on all RGB bytes,
+ *  and sends the processed PPM image back to the client.
+ *
+ *  Histogram Stretching:
+ *      I_min = minimum intensity in the image
+ *      I_max = maximum intensity in the image
+ *
+ *      scale  = 255.0 / (I_max - I_min)
+ *      p_out = (p_in - I_min) * scale
  *
  *  Supported PPM format:
  *   • P6 (binary)
  *   • Arbitrary image size (width × height)
  *   • 1-byte RGB channels (maxval = 255)
  *
- *  Histogram Stretching:
- *   1. Find global minimum and maximum pixel values (I_min, I_max)
- *   2. For each pixel p:
- *        p_out = (p − I_min) * maxval / (I_max − I_min)
- *      Values are clipped to [0, maxval].
- *   3. If I_max == I_min (flat image), no change is applied.
- *
  *  Communication protocol:
- *   • Same as Negative Version (3 header lines + RGB data).
+ *   1. Client sends 3 header lines:
+ *        - "P6"
+ *        - "<width> <height>"
+ *        - "255"
+ *   2. Client sends raw RGB data (width × height × 3 bytes)
+ *   3. Microserver applies Histogram Stretching
+ *   4. Microserver responds with:
+ *        - Same header (3 lines)
+ *        - Processed RGB data
+ *
+ *  Platform
+ *  ------------------------------------------------------------
+ *   • Hardware: Zybo Z7 board (ARM Cortex-A9 – PS7)
+ *   • UART: PS UART1 @ 115200 baud, 8N1
+ *   • Tools: Xilinx SDK / Vitis + RealTerm (Windows) or gtkterm (Linux)
  *
  ***************************************************************/
 
+
+// Standard C and Xilinx libraries
 #include <stdio.h>
-#include <stdlib.h>
 #include "platform.h"
 #include "xil_printf.h"
 #include "xuartps.h"
+#include "stdlib.h"
 
-#define UART_BASE   XPAR_PS7_UART_1_BASEADDR
-#define UART_DEVICE XPAR_PS7_UART_1_DEVICE_ID
+#define UART_BASE XPAR_PS7_UART_1_BASEADDR
 
-typedef struct {
-    int width;
-    int height;
-    int maxval;
-} PpmHeader;
-
-static XUartPs UartPs_1;
-
-/* ---------------- UART utilities ---------------- */
-
-static int uart_init(void)
-{
-    XUartPs_Config *Config;
-    int Status;
-
-    Config = XUartPs_LookupConfig(UART_DEVICE);
-    if (Config == NULL) {
-        xil_printf("ERROR: UART config not found\r\n");
-        return XST_FAILURE;
-    }
-
-    Status = XUartPs_CfgInitialize(&UartPs_1, Config, Config->BaseAddress);
-    if (Status != XST_SUCCESS) {
-        xil_printf("ERROR: UART init failed\r\n");
-        return XST_FAILURE;
-    }
-
-    Status = XUartPs_SetBaudRate(&UartPs_1, 115200);
-    if (Status != XST_SUCCESS) {
-        xil_printf("ERROR: UART set baudrate failed\r\n");
-        return XST_FAILURE;
-    }
-
-    return XST_SUCCESS;
-}
-
-static u8 uart_recv_byte(void)
-{
-    return XUartPs_RecvByte(UART_BASE);
-}
-
-static void uart_send_byte(u8 c)
-{
-    XUartPs_SendByte(UART_BASE, c);
-}
-
-/* ---------------- ASCII parsing helpers ---------------- */
-
-static int read_line(char *buf, int maxlen)
-{
+/***************************************************************
+ *  read_line()
+ *  ------------------------------------------------------------
+ *  Reads characters from UART until '\n' is encountered,
+ *  or until maxlen - 1 characters have been stored.
+ *
+ *  The resulting string is NULL-terminated.
+ ***************************************************************/
+int read_line(char *buf, int maxlen) {
     int i = 0;
     char c;
-
-    while (i < maxlen - 1) {
-        c = (char)uart_recv_byte();
+    while (i < maxlen-1) {
+        c = XUartPs_RecvByte(UART_BASE); // blocking receive
         buf[i++] = c;
-        if (c == '\n') break;
+        if (c == '\n') // end of textual line
+        break;
     }
-    buf[i] = '\0';
+    buf[i] = 0;// end string
     return i;
 }
 
-static int ascii_to_int(const char *s)
-{
-    int value = 0;
+/***************************************************************
+ *  to_int()
+ *  ------------------------------------------------------------
+ *  Converts an ASCII numeric string to integer.
+ *  Stops parsing at the first non-digit character.
+ ***************************************************************/
+int to_int(char *s) {
+    int n = 0;
     int i = 0;
-
     while (s[i] >= '0' && s[i] <= '9') {
-        value = value * 10 + (s[i] - '0');
+        n = n*10 + (s[i] - '0');
         i++;
     }
-    return value;
+    return n;
 }
 
-/* ---------------- PPM utilities ---------------- */
 
-static int ppm_read_header(PpmHeader *hdr,
-                           char *line_magic,
-                           char *line_dim,
-                           char *line_max,
-                           int   maxlen)
-{
-    read_line(line_magic, maxlen);
-    read_line(line_dim,   maxlen);
-    read_line(line_max,   maxlen);
+/***************************************************************
+ *  apply_histogram_stretching()
+ *  ------------------------------------------------------------
+ *  Finds I_min and I_max across the entire image buffer and
+ *  applies linear stretching:
+ *
+ *      scale = 255.0 / (I_max - I_min)
+ *      p_new = (p - I_min) * scale
+ *
+ ***************************************************************/
+void apply_histogram_stretching(u8 *img, int n) {
 
-    int i = 0;
-    int width = 0;
-    int height = 0;
+    // 1) Find minimum and maximum pixel intensity
+    u8 I_min = 255;
+    u8 I_max = 0;
 
-    while (line_dim[i] >= '0' && line_dim[i] <= '9') {
-        width = width * 10 + (line_dim[i] - '0');
-        i++;
+    for (int i = 0; i < n; i++) {
+        if (img[i] < I_min) I_min = img[i];
+        if (img[i] > I_max) I_max = img[i];
     }
 
-    if (line_dim[i] == ' ') {
-        i++;
-    }
-
-    while (line_dim[i] >= '0' && line_dim[i] <= '9') {
-        height = height * 10 + (line_dim[i] - '0');
-        i++;
-    }
-
-    int maxval = ascii_to_int(line_max);
-
-    hdr->width  = width;
-    hdr->height = height;
-    hdr->maxval = maxval;
-
-    return 0;
-}
-
-static void ppm_read_pixels(u8 *buffer, int num_bytes)
-{
-    for (int i = 0; i < num_bytes; i++) {
-        buffer[i] = uart_recv_byte();
-    }
-}
-
-static void ppm_write_header(const char *line_magic,
-                             const char *line_dim,
-                             const char *line_max)
-{
-    int i = 0;
-
-    while (line_magic[i] != '\0') {
-        uart_send_byte((u8)line_magic[i++]);
-    }
-
-    i = 0;
-    while (line_dim[i] != '\0') {
-        uart_send_byte((u8)line_dim[i++]);
-    }
-
-    i = 0;
-    while (line_max[i] != '\0') {
-        uart_send_byte((u8)line_max[i++]);
-    }
-}
-
-static void ppm_write_pixels(const u8 *buffer, int num_bytes)
-{
-    for (int i = 0; i < num_bytes; i++) {
-        uart_send_byte(buffer[i]);
-    }
-}
-
-/* ---------------- Image processing: histogram stretching ---------------- */
-
-/**
- * Linear histogram stretching:
- *  - Find I_min and I_max over the whole image.
- *  - Re-map each pixel to [0, maxval].
- */
-static void image_hist_stretch(u8 *buffer, int num_bytes, int maxval)
-{
-    int I_min = maxval;
-    int I_max = 0;
-
-    // 1) Compute global min and max
-    for (int i = 0; i < num_bytes; i++) {
-        int p = buffer[i];
-        if (p < I_min) I_min = p;
-        if (p > I_max) I_max = p;
-    }
-
-    // Avoid division by zero (flat image)
-    if (I_max == I_min) {
+    // Avoid division by zero
+    if (I_max == I_min)
         return;
-    }
 
-    // 2) Stretch each pixel
-    for (int i = 0; i < num_bytes; i++) {
-        int p = buffer[i];
-        int stretched = (p - I_min) * maxval / (I_max - I_min);
+    // 2) Compute scale factor
+    float scale = 255.0f / (float)(I_max - I_min);
 
-        if (stretched < 0)        stretched = 0;
-        if (stretched > maxval)   stretched = maxval;
+    // 3) Apply stretching
+    for (int i = 0; i < n; i++) {
+        float p = (img[i] - I_min) * scale;
 
-        buffer[i] = (u8)stretched;
+        // Clamp result to [0,255]
+        if (p < 0) p = 0;
+        if (p > 255) p = 255;
+
+        img[i] = (u8)p;
     }
 }
 
-/* ---------------- main() ---------------- */
 
-int main(void)
+/***************************************************************
+ *  main()
+ *  ------------------------------------------------------------
+ *  Implements the UART PPM microserver:
+ *  - init UART
+ *  - read header
+ *  - read pixel data
+ *  - apply negative transform
+ *  - send header back
+ *  - send processed pixel buffer
+ ***************************************************************/
+
+int main()
 {
     init_platform();
-
-    if (uart_init() != XST_SUCCESS) {
-        xil_printf("FATAL: UART initialization failed\r\n");
-        cleanup_platform();
+     /***********************************************************
+     *  UART initialization (PS UART1 @ 115200 baud)
+     **********************************************************/
+    XUartPs Uart_1_PS;
+    u16 DeviceId_1= XPAR_PS7_UART_1_DEVICE_ID;
+    int Status_1;
+    XUartPs_Config *Config_1;
+    Config_1 = XUartPs_LookupConfig(DeviceId_1);
+    if (NULL == Config_1) {
+        return XST_FAILURE;
+    }
+    Status_1 = XUartPs_CfgInitialize(&Uart_1_PS, Config_1, Config_1->BaseAddress); //init  UART
+    if (Status_1 != XST_SUCCESS) {
+        return XST_FAILURE;
+    }
+    u32 BaudRate = (u32)115200;
+    Status_1 = XUartPs_SetBaudRate(&Uart_1_PS, BaudRate); //set the BaudRate = 115200
+    if (Status_1 != (s32)XST_SUCCESS) {
         return XST_FAILURE;
     }
 
-    xil_printf("Lab 2 – UART Microserver (Histogram Stretching) started.\r\n");
+    /***********************************************************
+     * Read PPM header (3 lines)
+     **********************************************************/
 
-    PpmHeader hdr;
-    char line_magic[32];
-    char line_dim[32];
-    char line_max[32];
+    char line1[32], line2[32], line3[32];
 
-    ppm_read_header(&hdr, line_magic, line_dim, line_max, 32);
+    read_line(line1, 32);   // e.g., "P6\n"
+    read_line(line2, 32);   // e.g., "128 128\n"
+    read_line(line3, 32);   // e.g., "255\n"
 
-    int num_bytes = hdr.width * hdr.height * 3;
 
-    u8 *image = (u8 *)malloc(num_bytes);
-    if (image == NULL) {
-        xil_printf("ERROR: malloc failed (image buffer)\r\n");
-        cleanup_platform();
-        return XST_FAILURE;
+    /***********************************************************
+     * Parse width and height from ASCII line2
+     **********************************************************/
+    int width = 0, height = 0;
+    int i = 0;
+
+    // parse width
+    while (line2[i] >= '0' && line2[i] <= '9') {
+        width = width*10 + (line2[i] - '0');
+        i++;
     }
 
-    ppm_read_pixels(image, num_bytes);
+    i++;  // skip the space ' '
 
-    image_hist_stretch(image, num_bytes, hdr.maxval);
+    // parse height
+    while (line2[i] >= '0' && line2[i] <= '9') {
+        height = height*10 + (line2[i] - '0');
+        i++;
+    }
 
-    ppm_write_header(line_magic, line_dim, line_max);
-    ppm_write_pixels(image, num_bytes);
+    int maxval = to_int(line3); // expected: 255
 
-    free(image);
-    xil_printf("Lab 2 – Histogram Stretching Version completed.\r\n");
+    int num_pixels = width * height * 3;
 
-    cleanup_platform();
+     /***********************************************************
+     * Allocate buffer for RGB pixels
+     **********************************************************/
+
+    u8 *image = malloc(num_pixels);
+
+     /***********************************************************
+     *  Receive raw RGB bytes from UART
+     **********************************************************/
+    for (int i = 0; i < num_pixels; i++)
+        image[i] = XUartPs_RecvByte(UART_BASE);
+
+    /***********************************************************
+     * Apply negative transformation (external function)
+     **********************************************************/
+     apply_histogram_stretching(image, num_pixels);
+
+
+    /***********************************************************
+     * Send original PPM header back
+     **********************************************************/
+    for (int i = 0; line1[i] != 0; i++)
+        XUartPs_SendByte(UART_BASE, line1[i]);
+
+    for (int i = 0; line2[i] != 0; i++)
+        XUartPs_SendByte(UART_BASE, line2[i]);
+
+    for (int i = 0; line3[i] != 0; i++)
+        XUartPs_SendByte(UART_BASE, line3[i]);
+
+     /***********************************************************
+     *  Send processed image bytes
+     **********************************************************/
+    for (int i = 0; i < num_pixels; i++)
+        XUartPs_SendByte(UART_BASE, image[i]);
+
+    free(image);          // Release dynamically allocated image buffer
+    cleanup_platform();    // Shut down Zybo platform and de-initialize drivers
+
     return 0;
 }

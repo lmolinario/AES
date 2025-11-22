@@ -8,19 +8,20 @@
  *  Description
  *  ------------------------------------------------------------
  *  UART-based microserver running on the Zybo Z7.
- *  The server receives a PPM (P6) image over UART, computes the
- *  negative of each RGB channel, and sends the processed PPM
- *  image back to the client.
+ *  This version expects a *fixed-size* PPM P6 image of
+ *  resolution 128×128 pixels. The server receives the image
+ *  over UART, computes the negative of each RGB pixel, and
+ *  returns the processed PPM to the client.
  *
  *  Supported PPM format:
  *   • P6 (binary)
- *   • Arbitrary image size (width × height)
+ *   • Fixed size: 128 × 128
  *   • 1-byte RGB channels (maxval = 255)
  *
  *  Communication protocol:
  *   1. Client sends 3 header lines:
  *        - "P6"
- *        - "<width> <height>"
+ *        - "128 128"
  *        - "255"
  *   2. Client sends raw RGB data (width × height × 3 bytes)
  *   3. Microserver applies negative transformation
@@ -45,43 +46,13 @@
 
 #define UART_BASE XPAR_PS7_UART_1_BASEADDR
 
-/***************************************************************
- *  read_line()
- *  ------------------------------------------------------------
- *  Reads characters from UART until '\n' is encountered,
- *  or until maxlen - 1 characters have been stored.
- *
- *  The resulting string is NULL-terminated.
- ***************************************************************/
-int read_line(char *buf, int maxlen) {
-    int i = 0;
-    char c;
-    while (i < maxlen-1) {
-        c = XUartPs_RecvByte(UART_BASE); // blocking receive
-        buf[i++] = c;
-        if (c == '\n') // end of textual line
-        break;
-    }
-    buf[i] = 0;// end string
-    return i;
-}
+#define HEADER_SIZE 15 // Example: "P6\n128 128\n255\n"
+#define IMG_W 128
+#define IMG_H 128
+#define PIXELS (IMG_W * IMG_H * 3)
 
-/***************************************************************
- *  to_int()
- *  ------------------------------------------------------------
- *  Converts an ASCII numeric string to integer.
- *  Stops parsing at the first non-digit character.
- ***************************************************************/
-int to_int(char *s) {
-    int n = 0;
-    int i = 0;
-    while (s[i] >= '0' && s[i] <= '9') {
-        n = n*10 + (s[i] - '0');
-        i++;
-    }
-    return n;
-}
-
+u8 header[HEADER_SIZE];
+u8 image[PIXELS];
 
 /***************************************************************
  *  apply_negative()
@@ -135,78 +106,36 @@ int main()
         return XST_FAILURE;
     }
 
-    /***********************************************************
-     * Read PPM header (3 lines)
-     **********************************************************/
-
-    char line1[32], line2[32], line3[32];
-
-    read_line(line1, 32);   // e.g., "P6\n"
-    read_line(line2, 32);   // e.g., "128 128\n"
-    read_line(line3, 32);   // e.g., "255\n"
-
-
-    /***********************************************************
-     * Parse width and height from ASCII line2
-     **********************************************************/
-    int width = 0, height = 0;
-    int i = 0;
-
-    // parse width
-    while (line2[i] >= '0' && line2[i] <= '9') {
-        width = width*10 + (line2[i] - '0');
-        i++;
-    }
-
-    i++;  // skip the space ' '
-
-    // parse height
-    while (line2[i] >= '0' && line2[i] <= '9') {
-        height = height*10 + (line2[i] - '0');
-        i++;
-    }
-
-    int maxval = to_int(line3); // expected: 255
-
-    int num_pixels = width * height * 3;
-
-     /***********************************************************
-     * Allocate buffer for RGB pixels
-     **********************************************************/
-
-    u8 *image = malloc(num_pixels);
 
      /***********************************************************
      *  Receive raw RGB bytes from UART
      **********************************************************/
-    for (int i = 0; i < num_pixels; i++)
+    for (int i = 0; i < HEADER_SIZE; i++)
+        header[i] = XUartPs_RecvByte(UART_BASE);
+
+    /***********************************************************
+     * Receive raw RGB pixel data (128×128×3 bytes)
+     **********************************************************/
+    for (int i = 0; i < PIXELS; i++)
         image[i] = XUartPs_RecvByte(UART_BASE);
 
     /***********************************************************
-     * Apply negative transformation (external function)
+     * Apply negative transformation
      **********************************************************/
-    apply_negative(image, num_pixels);
-
+    apply_negative(image, PIXELS);
 
     /***********************************************************
-     * Send original PPM header back
+     * Send back header
      **********************************************************/
-    for (int i = 0; line1[i] != 0; i++)
-        XUartPs_SendByte(UART_BASE, line1[i]);
+    for (int i = 0; i < HEADER_SIZE; i++)
+        XUartPs_SendByte(UART_BASE, header[i]);
 
-    for (int i = 0; line2[i] != 0; i++)
-        XUartPs_SendByte(UART_BASE, line2[i]);
-
-    for (int i = 0; line3[i] != 0; i++)
-        XUartPs_SendByte(UART_BASE, line3[i]);
-
-     /***********************************************************
-     *  Send processed image bytes
+    /***********************************************************
+     * Send back processed pixel buffer
      **********************************************************/
-    for (int i = 0; i < num_pixels; i++)
+    for (int i = 0; i < PIXELS; i++)
         XUartPs_SendByte(UART_BASE, image[i]);
 
-    free(image);          // Release dynamically allocated image buffer
     cleanup_platform();    // Shut down Zybo platform and de-initialize drivers
 
     return 0;

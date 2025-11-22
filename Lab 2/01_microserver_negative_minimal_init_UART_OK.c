@@ -46,7 +46,7 @@ int main()
 
     // Read pixels
     for (int i = 0; i < PIXELS; i++)
-        image[i] = XUartPs_RecvByte(UART_BASE);
+        image[i] = XUartPs_RecvByte(UART_BASE);c
 
 
     // Apply negative
