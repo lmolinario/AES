@@ -106,10 +106,10 @@ int main()
         return XST_FAILURE;
     }
 
-
-     /***********************************************************
-     *  Receive raw RGB bytes from UART
+    /***********************************************************
+     *  Receive PPM header (fixed 15 bytes)
      **********************************************************/
+
     for (int i = 0; i < HEADER_SIZE; i++)
         header[i] = XUartPs_RecvByte(UART_BASE);
 
