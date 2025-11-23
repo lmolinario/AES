@@ -16,9 +16,16 @@
  *    1) Build histogram over 256 intensity levels
  *    2) Compute cumulative distribution function (CDF)
  *    3) Identify smallest non-zero CDF value (cdf_min)
- *    4) Compute mapping:
- *         map[i] = round( (CDF[i] - cdf_min) / (N - cdf_min) * 255 )
- *    5) Apply mapping to each pixel
+ *    4) Compute mapping (Look-Up Table):
+ *
+ *         map[i] =
+ *           ((CDF[i] - cdf_min) / (N - cdf_min)) * 255
+ *
+ *       A 256-entry LUT is used so each pixel can be
+ *       transformed in O(1) time, improving performance
+ *       on embedded processors.
+ *
+ *    5) Apply LUT to each pixel
  *
  *  Supported PPM format:
  *   • P6 (binary)
@@ -43,6 +50,7 @@
  *   • Tools: Xilinx SDK / Vitis + RealTerm (Windows) or gtkterm (Linux)
  *
  ***************************************************************/
+
 
 // Standard C and Xilinx libraries
 #include <stdio.h>
