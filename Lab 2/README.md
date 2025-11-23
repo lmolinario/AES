@@ -1,5 +1,10 @@
 # Lab 2 – UART Microserver
 
+This repository contains the full implementation of Lab 2 for the 
+Advanced Embedded Systems course (University of Cagliari).  
+The project implements a UART-based microserver running on the Zybo Z7 board, 
+capable of receiving, processing and returning PPM P6 images.
+
 ---
 
 ## Instructions
@@ -191,9 +196,9 @@ display out.ppm
 ## Notes
 
 - UART communication is blocking for reliability  
-- Pixel buffer is allocated dynamically  
+- Pixel buffer is allocated dynamically (in Histogram Stretching and Histogram Equalization) 
 - Processing is performed in-place for efficiency (all transformations operate directly on the pixel buffer).
-- Header is retransmitted **unchanged**  
+- Header is retransmitted unchanged  
 
 ---
 
