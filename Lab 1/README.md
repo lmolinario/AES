@@ -1,4 +1,9 @@
 # Lab 1 – Polling & Interrupts
+This repository contains the full implementation of Lab 1 for the
+Advanced Embedded Systems course (University of Cagliari).
+The project demonstrates how to interface GPIO peripherals on the Zybo Z7 and how to manage events using both polling and interrupt-driven techniques.
+The lab progresses from a  switch-reading application to a dual-interrupt system using the AXI GPIO and the AXI Interrupt Controller (INTC), 
+concluding with an extended ISR that performs arithmetic and bitwise logic.
 
 ---
 
