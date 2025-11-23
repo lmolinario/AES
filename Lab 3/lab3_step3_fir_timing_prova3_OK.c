@@ -1,0 +1,390 @@
+/******************************************************************************
+*
+* Copyright (C) 2009 - 2014 Xilinx, Inc.  All rights reserved.
+*
+******************************************************************************/
+
+#include <stdio.h>
+#include "platform.h"
+#include "xil_printf.h"
+#include "xil_io.h"
+#include "xiicps.h"
+#include "timer_ps.h"
+#include "xil_cache.h"   // <-- aggiunto per Xil_[ID]CacheEnable/Disable
+#include <time.h>
+#include <stdlib.h>
+#include <math.h>
+
+/* I2S Register offsets */
+#define I2S_RESET_REG       0x00
+#define I2S_CTRL_REG        0x04
+#define I2S_CLK_CTRL_REG    0x08
+#define I2S_FIFO_STS_REG    0x20
+#define I2S_RX_FIFO_REG     0x28
+#define I2S_TX_FIFO_REG     0x2C
+
+#define FIFO_ISR   (0x00)
+#define FIFO_IER   (0x04)
+#define FIFO_TDFV  (0x0C)
+#define FIFO_RDFO  (0x1C)
+#define FIFO_TDR   (0x2C)
+#define FIFO_TDFD  (0x10)
+#define FIFO_TLR   (0x14)
+#define FIFO_RLR   (0x24)
+#define FIFO_RDFD  (0x20)
+#define FIFO_RDR   (0x30)
+
+/* IIC address of the SSM2603 device and the desired IIC clock speed */
+#define IIC_SLAVE_ADDR      0b0011010
+#define IIC_SCLK_RATE       100000
+
+#define AUDIO_IIC_ID        XPAR_XIICPS_0_DEVICE_ID
+#define AUDIO_CTRL_BASEADDR XPAR_AXI_I2S_ADI_0_S00_AXI_BASEADDR
+#define SCU_TIMER_ID        XPAR_SCUTIMER_DEVICE_ID
+
+#define SWI_BASE_ADDR       XPAR_AXI_GPIO_2_BASEADDR
+#define LED_BASE_ADDR       XPAR_AXI_GPIO_1_BASEADDR
+#define BUT_BASE_ADDR       XPAR_AXI_GPIO_0_BASEADDR
+
+#define AUDIO_FIFO          XPAR_AXI_FIFO_MM_S_0_BASEADDR
+#define FIR_FIFO            XPAR_AXI_FIFO_MM_S_1_BASEADDR
+
+#define GLOBAL_TMR_BASEADDR XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
+
+/* --------- Costanti per il timing (CPU, Global Timer, Fs) --------- */
+#define CPU_FREQ_HZ   667000000U           // 667 MHz (ARM)
+#define GTIMER_FREQ_HZ (CPU_FREQ_HZ / 2U)  // Global timer a metà frequenza
+#define FS_HZ         48000U               // Frequenza di campionamento (modifica se misurata diversa)
+
+/* Se non è già definito nel timer_ps.h, definisco l'offset del contatore low */
+#ifndef GTIMER_COUNTER_LOWER_OFFSET
+#define GTIMER_COUNTER_LOWER_OFFSET 0x00   // contatore low a offset 0x00
+#endif
+
+/* Helper per leggere i 32 bit meno significativi del Global Timer */
+static inline u32 gt_get_low(void)
+{
+    return Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+}
+
+/* ------------------------------------------------------------ */
+/*              Low-Pass and High-Pass FIR filter coefficients  */
+/* ------------------------------------------------------------ */
+
+#define coeffLP -1.692219e-02, 5.043750e-02,3.935835e-02,4.341238e-02,5.137933e-02,5.982048e-02,6.748827e-02, 7.379049e-02, 7.824605e-02, 8.052560e-02,8.052560e-02, 7.824605e-02, 7.379049e-02, 6.748827e-02,5.982048e-02,5.137933e-02,4.341238e-02,3.935835e-02,5.043750e-02,-0.0169221860
+#define coeffHP -3.942071e-02,-5.929114e-03,1.430997e-02,4.069053e-02,5.762197e-02,4.843584e-02,4.349633e-03,-6.932913e-02,-1.527862e-01,-2.187328e-01,7.562085e-01,-2.187328e-01,-1.527862e-01,-6.932913e-02,4.349633e-03,4.843584e-02,5.762197e-02,4.069053e-02,1.430997e-02,-5.929114e-03,-0.0394207089
+#define N_LP 20 // ordine filtro
+#define N_HP 21 // ordine filtro
+
+float LP[] = { coeffLP };
+float HP[] = { coeffHP };
+
+/* ------------------------------------------------------------ */
+/*              Global Variables                               */
+/* ------------------------------------------------------------ */
+
+XIicPs Iic;     /* Instance of the IIC Device */
+
+/* ------------------------------------------------------------ */
+/*              Procedure Definitions                          */
+/* ------------------------------------------------------------ */
+
+int AudioRegSet(XIicPs *IIcPtr, u8 regAddr, u16 regData)
+{
+    int Status;
+    u8 SendBuffer[2];
+
+    SendBuffer[0] = regAddr << 1;
+    SendBuffer[0] = SendBuffer[0] | ((regData >> 8) & 0b1);
+    SendBuffer[1] = regData & 0xFF;
+
+    Status = XIicPs_MasterSendPolled(IIcPtr, SendBuffer, 2, IIC_SLAVE_ADDR);
+    if (Status != XST_SUCCESS) {
+        xil_printf("IIC send failed\n\r");
+        return XST_FAILURE;
+    }
+    while (XIicPs_BusIsBusy(IIcPtr)) {
+        /* NOP */
+    }
+    return XST_SUCCESS;
+}
+
+/*** AudioInitialize(...)
+ */
+int AudioInitialize(u16 timerID,  u16 iicID, u32 i2sAddr)
+{
+    int Status;
+    XIicPs_Config *Config;
+    u32 i2sClkDiv;
+
+    TimerInitialize(timerID);
+
+    Config = XIicPs_LookupConfig(iicID);
+    if (NULL == Config) {
+        return XST_FAILURE;
+    }
+
+    Status = XIicPs_CfgInitialize(&Iic, Config, Config->BaseAddress);
+    if (Status != XST_SUCCESS) {
+        return XST_FAILURE;
+    }
+
+    Status = XIicPs_SelfTest(&Iic);
+    if (Status != XST_SUCCESS) {
+        return XST_FAILURE;
+    }
+
+    Status = XIicPs_SetSClk(&Iic, IIC_SCLK_RATE);
+    if (Status != XST_SUCCESS) {
+        return XST_FAILURE;
+    }
+
+    Status = AudioRegSet(&Iic, 15, 0b000000000); // Reset
+    TimerDelay(75000);
+    Status |= AudioRegSet(&Iic, 6, 0b000110000); // Power up
+    Status |= AudioRegSet(&Iic, 0, 0b000010111);
+    Status |= AudioRegSet(&Iic, 1, 0b000010111);
+    Status |= AudioRegSet(&Iic, 2, 0b101111001);
+    Status |= AudioRegSet(&Iic, 4, 0b000010000);
+    Status |= AudioRegSet(&Iic, 5, 0b000000000);
+    Status |= AudioRegSet(&Iic, 7, 0b000001010); // 24-bit word length
+    Status |= AudioRegSet(&Iic, 8, 0b000000000); // no CLKDIV2
+    TimerDelay(75000);
+    Status |= AudioRegSet(&Iic, 9, 0b000000001);
+    Status |= AudioRegSet(&Iic, 6, 0b000100000);
+    Status = AudioRegSet(&Iic, 4, 0b000010000);
+
+    if (Status != XST_SUCCESS) {
+        return XST_FAILURE;
+    }
+
+    i2sClkDiv = 1;              // BCLK = MCLK / 4
+    i2sClkDiv = i2sClkDiv | (31 << 16); // LRCLK = BCLK / 64
+
+    Xil_Out32(i2sAddr + I2S_CLK_CTRL_REG, i2sClkDiv); // clock div register
+
+    Xil_Out32(AUDIO_CTRL_BASEADDR + I2S_RESET_REG, 0b110); // Reset RX and TX FIFOs
+    Xil_Out32(AUDIO_CTRL_BASEADDR + I2S_CTRL_REG, 0b011);  // Enable RX/TX, unmute
+    return XST_SUCCESS;
+}
+
+void I2SFifoWrite (u32 i2sBaseAddr, u32 audioData)
+{
+    Xil_Out32(i2sBaseAddr + 0x10, audioData); // write DATA
+    Xil_Out32(i2sBaseAddr + 0x14, 4);         // length (4 bytes)
+
+    while ((Xil_In32(i2sBaseAddr + 0x00) & 0x08000000) != 0x08000000) {
+        ; // wait for transmission complete
+    }
+    Xil_Out32(i2sBaseAddr + 0x00, 0x08000000);  // ack transmission complete
+}
+
+u32 I2SFifoRead (u32 i2sBaseAddr)
+{
+    while (Xil_In32(i2sBaseAddr + 0x1C) == 0) {
+        ; // wait for a sample in the FIFO
+    }
+    int data = Xil_In32(i2sBaseAddr + 0x20);
+    return data;
+}
+
+void initialize_FIFO(u32 fifoAddr)
+{
+    Xil_Out32(AUDIO_FIFO + 0x2c, 0);
+
+    xil_printf("FIFO_ISR:  0x%08x\n", Xil_In32(fifoAddr + FIFO_ISR));
+    print("write FIFO_ISR\n\r");
+    Xil_Out32(fifoAddr + FIFO_ISR, 0xFFFFFFFF);
+    xil_printf("FIFO_ISR:  0x%08x\n", Xil_In32(fifoAddr + FIFO_ISR));
+    xil_printf("FIFO_IER:  0x%08x\n", Xil_In32(fifoAddr + FIFO_IER));
+    xil_printf("FIFO_TDFV: 0x%08x\n", Xil_In32(fifoAddr + FIFO_TDFV));
+    xil_printf("FIFO_RDFO: 0x%08x\n", Xil_In32(fifoAddr + FIFO_RDFO));
+
+    print("Write IER\n\r");
+    Xil_Out32(fifoAddr + FIFO_IER, 0x0C000000);
+
+    print("Write TDR\n\r");
+    Xil_Out32(fifoAddr + FIFO_TDR, 0x00000000);
+
+    xil_printf("FIFO_ISR:  0x%08x\n", Xil_In32(fifoAddr + FIFO_ISR));
+    print("write FIFO_ISR\n\r");
+    Xil_Out32(fifoAddr + FIFO_ISR, 0xFFFFFFFF);
+    xil_printf("FIFO_ISR:  0x%08x\n", Xil_In32(fifoAddr + FIFO_ISR));
+    xil_printf("FIFO_IER:  0x%08x\n", Xil_In32(fifoAddr + FIFO_IER));
+    xil_printf("FIFO_TDFV: 0x%08x\n", Xil_In32(fifoAddr + FIFO_TDFV));
+    xil_printf("FIFO_RDFO: 0x%08x\n", Xil_In32(fifoAddr + FIFO_RDFO));
+
+    print("write FIFO_IER\n");
+    Xil_Out32(fifoAddr + FIFO_IER, 0x04100000);
+    xil_printf("FIFO_ISR:  0x%08x\n", Xil_In32(fifoAddr + FIFO_ISR));
+    print("write FIFO_ISR\n");
+    Xil_Out32(fifoAddr + FIFO_ISR, 0x00100000);
+}
+
+/* ------------------------------------------------------------ */
+/*  FIR GENERICO: y[n] = sum_{k=0}^{taps-1} h[k] * x[n-k]       */
+/* ------------------------------------------------------------ */
+int FIR_filter(int *buffer, float *coeff, int taps)
+{
+    float acc = 0.0f;
+    int k;
+
+    for (k = 0; k < taps; k++) {
+        acc += coeff[k] * (float)buffer[k];
+    }
+
+    return (int)acc;   // campione filtrato come int
+}
+
+/* ------------------------------------------------------------ */
+/*  Step 3 – Misura tempo di esecuzione della FIR con GlobalTimer */
+/* ------------------------------------------------------------ */
+void measure_fir_time(const char *name, float *coeff, int taps)
+{
+    const int reps = 1000;
+    int i;
+    static int test_buffer[N_HP];   // uso la dimensione massima
+
+    /* Inizializza il buffer con qualche valore pseudo-random */
+    for (i = 0; i < N_HP; i++) {
+        test_buffer[i] = (i * 1234) & 0xFFFF;
+    }
+
+    /* Warm-up: evita effetti del primo giro */
+    volatile int out = 0;
+    for (i = 0; i < 100; i++) {
+        out = FIR_filter(test_buffer, coeff, taps);
+    }
+
+    /* Misura reps chiamate di FIR_filter() */
+    u32 t0 = gt_get_low();
+    for (i = 0; i < reps; i++) {
+        out = FIR_filter(test_buffer, coeff, taps);
+    }
+    u32 t1 = gt_get_low();
+    (void)out;
+
+    u32 dt_ticks = t1 - t0;
+
+    /* Cicli CPU totali (1 tick = 2 cicli CPU) */
+    unsigned long long total_cycles = (unsigned long long)dt_ticks * 2ULL;
+    u32 cycles_per_call = (u32)(total_cycles / (unsigned long long)reps);
+    u32 cycles_per_tap  = cycles_per_call / (u32)taps;
+
+    /* Cicli disponibili per campione, dato Fs */
+    u32 cycles_per_sample = CPU_FREQ_HZ / FS_HZ;
+
+    /* Numero massimo di tap gestibili in real-time */
+    u32 max_taps = cycles_per_sample / cycles_per_tap;
+
+    /* Tempo totale in microsecondi (solo per avere un'idea) */
+    u32 time_us_total = (u32)(((unsigned long long)dt_ticks * 1000000ULL) /
+                              (unsigned long long)GTIMER_FREQ_HZ);
+    u32 time_us_per_call = time_us_total / (u32)reps;
+
+    xil_printf("\n[FIR Timing] %s\n", name);
+    xil_printf("  reps                 = %d\n", reps);
+    xil_printf("  taps                 = %d\n", taps);
+    xil_printf("  timer ticks (total)  = %d\n", dt_ticks);
+    xil_printf("  time  (total) [us]   = %d\n", time_us_total);
+    xil_printf("  time / call   [us]   = %d\n", time_us_per_call);
+    xil_printf("  cycles / call        = %d\n", cycles_per_call);
+    xil_printf("  cycles / tap         = %d\n", cycles_per_tap);
+    xil_printf("  cycles / sample @Fs  = %d (Fs = %d Hz)\n",
+               cycles_per_sample, FS_HZ);
+    xil_printf("  max taps in RT       = %d\n", max_taps);
+}
+
+/* ------------------------------------------------------------ */
+/*                           main                               */
+/* ------------------------------------------------------------ */
+int main()
+{
+    init_platform();
+
+    print("Started!\n\r");
+    xil_printf("\n=== LAB3 – Step 2+3: FIR Filtering & Timing ===\n");
+
+    AudioInitialize(SCU_TIMER_ID, AUDIO_IIC_ID, AUDIO_CTRL_BASEADDR);
+
+    initialize_FIFO(AUDIO_FIFO);
+    initialize_FIFO(FIR_FIFO);
+
+
+
+    /* ------------------ Step 3: Misure FIR ------------------ */
+
+    xil_printf("\n--- Measuring FIR execution time (caches ENABLED) ---\n");
+    measure_fir_time("LP filter (cache ON)", LP, N_LP);
+    measure_fir_time("HP filter (cache ON)", HP, N_HP);
+
+    xil_printf("\n--- Disabling caches and measuring again ---\n");
+    Xil_DCacheDisable();
+    Xil_ICacheDisable();
+    measure_fir_time("LP filter (cache OFF)", LP, N_LP);
+    measure_fir_time("HP filter (cache OFF)", HP, N_HP);
+
+    xil_printf("\n--- Re-enabling caches for audio streaming ---\n");
+    Xil_DCacheEnable();
+    Xil_ICacheEnable();
+
+    xil_printf("\nTiming measurements completed. Starting real-time audio loop...\n");
+
+        /* ------------------ Step 2: FIR in real-time ------------ */
+
+    int SampleL, SampleR;
+
+    // Buffer per la convoluzione FIR (uso dimensione N_HP, la più grande)
+    int bufferL[N_HP], bufferR[N_HP];
+
+    // Inizializza i buffer a zero
+    int i;
+    for (i = 0; i < N_HP; i++) {
+        bufferL[i] = 0;
+        bufferR[i] = 0;
+    }
+
+    while (1) {
+
+        // --- ACQUISIZIONE ---
+        SampleL = (int)I2SFifoRead(AUDIO_FIFO);
+        SampleR = (int)I2SFifoRead(AUDIO_FIFO);
+
+        // --- SLIDING WINDOW: shift a destra ---
+        for (i = N_HP - 1; i > 0; i--) {
+            bufferL[i] = bufferL[i - 1];
+            bufferR[i] = bufferR[i - 1];
+        }
+        bufferL[0] = SampleL;
+        bufferR[0] = SampleR;
+
+        // --- SELEZIONE FILTRO TRAMITE SWITCH ---
+        u32 sw = Xil_In32(SWI_BASE_ADDR);
+
+        int outL, outR;
+
+        if (sw & 0x1) {
+            // SW0 ON → Low-pass
+            outL = FIR_filter(bufferL, LP, N_LP);
+            outR = FIR_filter(bufferR, LP, N_LP);
+        }
+        else if (sw & 0x2) {
+            // SW1 ON → High-pass
+            outL = FIR_filter(bufferL, HP, N_HP);
+            outR = FIR_filter(bufferR, HP, N_HP);
+        }
+        else {
+            // Nessun filtro selezionato → loopback “clean”
+            outL = SampleL;
+            outR = SampleR;
+        }
+
+        // --- OUTPUT ---
+        I2SFifoWrite(AUDIO_FIFO, outL);
+        I2SFifoWrite(AUDIO_FIFO, outR);
+    }
+
+    // Non verrà mai raggiunto, ma lo lasciamo per completezza
+    cleanup_platform();
+    return 0;
+}

@@ -242,8 +242,7 @@ int FIR_filter(int *buffer, float *coeff, int taps)
 
 /* ------------------------------------------------------ */
 /*              STEP 3 – FIR Timing (offline)             */
-/* ------------------------------------------------------ */
-void RunFIRTimingStep3(void)
+/* ------------------------------------------------------ */void RunFIRTimingStep3(void)
 {
     xil_printf("\n=== Step 3: FIR Timing ===\n\r");
 
@@ -262,47 +261,44 @@ void RunFIRTimingStep3(void)
     int dummy;
     int iterations = 200;
 
-    const float Fs        = 48000.0f;       // sample rate ≈ 48 kHz
+    const float Fs        = 48000.0f;       // ≈ 48 kHz
     const float CPU_FREQ  = 333000000.0f;   // 333 MHz
-    float budget_cycles   = CPU_FREQ / Fs;  // cycles per sample
+    float budget_cycles   = CPU_FREQ / Fs;  // ≈ 6937 cycles/sample
 
-        /* Convert float → integer for xil_printf */
-    int Fs_int        = (int)Fs;                     // ≈ 48000
-    int Cpu_MHz_int   = (int)(CPU_FREQ / 1e6f);      // ≈ 333
-    int budget_int    = (int)budget_cycles;          // ≈ 6937 cycles/sample
-
-
+    /* Convert float → integer for xil_printf */
+    int Fs_int      = (int)Fs;
+    int CpuMHz_int  = (int)(CPU_FREQ / 1e6f);
+    int budget_int  = (int)budget_cycles;
 
     xil_printf("Fs ≈ %d Hz, CPU ≈ %d MHz → budget ≈ %d cycles/sample\n\r",
-               Fs_int, Cpu_MHz_int, budget_int);
+               Fs_int, CpuMHz_int, budget_int);
 
-    xil_printf("LP FIR: %d cycles (avg), %.2f cyc/tap → max taps ≈ %d\n\r",
-           avg_lp, cyc_per_tap_lp, (int)max_taps_lp);
+    /**********************
+     *   CACHE ON
+     **********************/
+    xil_printf("\n[Cache ON]\n\r");
 
-    xil_printf("HP FIR: %d cycles (avg), %.2f cyc/tap → max taps ≈ %d\n\r",
-           avg_hp, cyc_per_tap_hp, (int)max_taps_hp);
-
-
-    /* ---- LP, CACHE ON ---- */
+    /* LP FIR timing */
+    acc_lp = 0;
     for (int k = 0; k < iterations; k++) {
-        t0 = Xil_In32(GLOBAL_TMR_BASEADDR + 0x00);
+        t0 = Xil_In32(GLOBAL_TMR_BASEADDR);
         dummy = FIR_filter(testBuf, LP, N_LP);
-        t1 = Xil_In32(GLOBAL_TMR_BASEADDR + 0x00);
+        t1 = Xil_In32(GLOBAL_TMR_BASEADDR);
         acc_lp += (unsigned long long)(t1 - t0);
     }
     int avg_lp = (int)(acc_lp / iterations);
     float cyc_per_tap_lp = (float)avg_lp / (float)N_LP;
     float max_taps_lp = budget_cycles / cyc_per_tap_lp;
 
-    xil_printf("\n[Cache ON]\n\r");
     xil_printf("LP FIR: %d cycles (avg), %.2f cyc/tap → max taps ≈ %.1f\n\r",
                avg_lp, cyc_per_tap_lp, max_taps_lp);
 
-    /* ---- HP, CACHE ON ---- */
+    /* HP FIR timing */
+    acc_hp = 0;
     for (int k = 0; k < iterations; k++) {
-        t0 = Xil_In32(GLOBAL_TMR_BASEADDR + 0x00);
+        t0 = Xil_In32(GLOBAL_TMR_BASEADDR);
         dummy = FIR_filter(testBuf, HP, N_HP);
-        t1 = Xil_In32(GLOBAL_TMR_BASEADDR + 0x00);
+        t1 = Xil_In32(GLOBAL_TMR_BASEADDR);
         acc_hp += (unsigned long long)(t1 - t0);
     }
     int avg_hp = (int)(acc_hp / iterations);
@@ -312,34 +308,36 @@ void RunFIRTimingStep3(void)
     xil_printf("HP FIR: %d cycles (avg), %.2f cyc/tap → max taps ≈ %.1f\n\r",
                avg_hp, cyc_per_tap_hp, max_taps_hp);
 
-    /* ---- Disable cache and repeat ---- */
+    /**********************
+     *   CACHE OFF
+     **********************/
     xil_printf("\nDisabling caches...\n\r");
     Xil_DCacheDisable();
     Xil_ICacheDisable();
 
-    acc_lp = 0ULL;
-    acc_hp = 0ULL;
+    xil_printf("\n[Cache OFF]\n\r");
 
-    /* LP, cache OFF */
+    /* LP FIR timing */
+    acc_lp = 0;
     for (int k = 0; k < iterations; k++) {
-        t0 = Xil_In32(GLOBAL_TMR_BASEADDR + 0x00);
+        t0 = Xil_In32(GLOBAL_TMR_BASEADDR);
         dummy = FIR_filter(testBuf, LP, N_LP);
-        t1 = Xil_In32(GLOBAL_TMR_BASEADDR + 0x00);
+        t1 = Xil_In32(GLOBAL_TMR_BASEADDR);
         acc_lp += (unsigned long long)(t1 - t0);
     }
     avg_lp = (int)(acc_lp / iterations);
     cyc_per_tap_lp = (float)avg_lp / (float)N_LP;
     max_taps_lp = budget_cycles / cyc_per_tap_lp;
 
-    xil_printf("\n[Cache OFF]\n\r");
     xil_printf("LP FIR: %d cycles (avg), %.2f cyc/tap → max taps ≈ %.1f\n\r",
                avg_lp, cyc_per_tap_lp, max_taps_lp);
 
-    /* HP, cache OFF */
+    /* HP FIR timing */
+    acc_hp = 0;
     for (int k = 0; k < iterations; k++) {
-        t0 = Xil_In32(GLOBAL_TMR_BASEADDR + 0x00);
+        t0 = Xil_In32(GLOBAL_TMR_BASEADDR);
         dummy = FIR_filter(testBuf, HP, N_HP);
-        t1 = Xil_In32(GLOBAL_TMR_BASEADDR + 0x00);
+        t1 = Xil_In32(GLOBAL_TMR_BASEADDR);
         acc_hp += (unsigned long long)(t1 - t0);
     }
     avg_hp = (int)(acc_hp / iterations);
@@ -351,11 +349,11 @@ void RunFIRTimingStep3(void)
 
     xil_printf("\n[Step 3 completed]\n\r");
 
-    /* IMPORTANT: re-enable caches for runtime audio */
     xil_printf("Re-enabling caches...\n\r");
     Xil_ICacheEnable();
     Xil_DCacheEnable();
 }
+
 
 /* ------------------------------------------------------ */
 /*                        MAIN                            */
