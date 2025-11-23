@@ -1,4 +1,4 @@
-# Lab 2 – UART Microserver
+# Lab 2 – the PS
 
 This repository contains the full implementation of Lab 2 for the 
 Advanced Embedded Systems course (University of Cagliari).  
