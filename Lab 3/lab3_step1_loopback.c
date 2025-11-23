@@ -123,7 +123,7 @@ void initialize_FIFO(u32 addr)
  *  Calcolo corretto della Fs usando il clock 333 MHz
  ******************************************************************************/
 
-...
+
 int main()
 {
     init_platform();
