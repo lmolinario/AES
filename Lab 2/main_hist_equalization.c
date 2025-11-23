@@ -100,9 +100,20 @@ int to_int(char *s) {
  *    1) Build histogram over 256 levels
  *    2) Compute cumulative distribution function (CDF)
  *    3) Find smallest non-zero CDF value (cdf_min)
- *    4) Build mapping table:
+ *    4) Build mapping table (LUT):
  *         map[i] = round( (CDF[i] - cdf_min) / (N - cdf_min) * 255 )
  *    5) Apply mapping to all pixels
+ *
+ *  Rationale for using a LUT (Look-Up Table):
+ *    - Histogram Equalization transforms each pixel intensity
+ *      using the same formula. Computing this formula for all
+ *      pixels would involve heavy floating-point operations.
+ *    - Instead, we precompute the 256 possible output values
+ *      once and store them in a LUT (map[256]).
+ *    - Then, each pixel is transformed in O(1) time via:
+ *            img[i] = map[ img[i] ];
+ *    - This approach is standard in image processing and
+ *       improves performance on embedded hardware.
  *
  *  PARAMETERS:
  *    - img : pointer to image buffer (RGB as flat array)
@@ -114,19 +125,19 @@ void apply_histogram_equalization(u8 *img, int n)
     int cdf[256]  = {0};
     u8  map[256];
 
-    // Histogram
+    // Histogram over 256 intensity levels ----
     for (int i = 0; i < n; i++)
         hist[img[i]]++;
 
-    // CDF
+    // Cumulative Distribution Function (CDF) ----
     cdf[0] = hist[0];
     for (int i = 1; i < 256; i++)
         cdf[i] = cdf[i - 1] + hist[i];
 
-    // Total number of pixels
+    // Total number of pixels (RGB bytes)
     int N = n;
 
-    // Find cdf_min (first non-zero)
+    //  Find cdf_min: first non-zero value in CDF ----
     int cdf_min = 0;
     for (int i = 0; i < 256; i++) {
         if (cdf[i] != 0) {
@@ -135,11 +146,12 @@ void apply_histogram_equalization(u8 *img, int n)
         }
     }
 
-    // Avoid division by zero
+    // If all pixels have the same value, equalization has no effect
     if (cdf_min == N)
         return;
 
-    // Build LUT
+    // Build LUT (Look-Up Table) ----
+    // Precompute the equalized value for each possible intensity [0..255]
     for (int i = 0; i < 256; i++) {
         float norm = (float)(cdf[i] - cdf_min) / (float)(N - cdf_min);
         int val = (int)(norm * 255.0f);
@@ -150,7 +162,7 @@ void apply_histogram_equalization(u8 *img, int n)
         map[i] = (u8)val;
     }
 
-    // Apply LUT to every pixel
+    // Apply LUT to every pixel ----
     for (int i = 0; i < n; i++)
         img[i] = map[img[i]];
 }
