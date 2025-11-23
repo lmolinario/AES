@@ -106,6 +106,13 @@ Lab 2/
 
 
 ```
+**Notes:**
+
+* Folder `AES/` contains the **complete SDK workspace** used for compilation and on-board testing.
+* The `.c` files in the root are **clean standalone versions** for review and grading.
+*All three microservers share the same UART controller setup and follow the same processing pipeline: parsing the PPM header, receiving pixel data, applying the transformation, and sending the output back over UART.
+
+---
 
 ## Implementations Summary
 
