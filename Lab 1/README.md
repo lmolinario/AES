@@ -62,9 +62,9 @@ Lab 1/
 │   ├── design_1_wrapper_hw_platform_0/ → Exported Vivado hardware platform (.hdf)
 │   └── SDK.log                         → Build/debug session log
 │
-├── a_lab1_polling_basic.c           → Clean and documented source (Part a)
-├── b_lab1_interrupt_part1.c         → Clean and documented source (Part b)
-├── c_lab1_interrupt_part2.c         → Clean and documented source (Part c)
+├── a_lab1_polling_basic.c           → Polling-based switch-to-LED mirroring
+├── b_lab1_interrupt_part1.c         → Dual-interrupt handling (SW + BTN)
+├── c_lab1_interrupt_part2.c         → Extended ISR logic with Student ID operation
 └── README.md                        → Lab documentation
 ```
 
