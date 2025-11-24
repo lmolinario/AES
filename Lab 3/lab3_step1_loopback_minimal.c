@@ -1,49 +1,60 @@
-/******************************************************************************
-*
-* Copyright (C) 2009 - 2014 Xilinx, Inc.  All rights reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* Use of the Software is limited solely to applications:
-* (a) running on a Xilinx device, or
-* (b) that interact with a Xilinx device through a bus or interconnect.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-* XILINX  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-* WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
-* OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*
-* Except as contained in this notice, the name of the Xilinx shall not be used
-* in advertising or otherwise to promote the sale, use or other dealings in
-* this Software without prior written authorization from Xilinx.
-*
-******************************************************************************/
+/***************************************************************
+ *  Lab 3 – Audio Passthrough & Sampling Frequency Measurement
+ *  Author: Lello Molinario
+ *  University of Cagliari – Advanced Embedded Systems (AES)
+ *  Student ID: 70/90/000369
+ *  Date: November 2025
+ *
+ *  Description
+ *  ------------------------------------------------------------
+ *  Real-time audio loopback application running on the Zybo Z7.
+ *  The program acquires stereo audio samples (Left + Right)
+ *  from the SSM2603 audio codec via AXI-I2S, and immediately
+ *  forwards the samples back to the output FIFO (“passthrough”).
+ *
+ *  The goal of STEP 1 is to:
+ *    • verify correct initialization of the SSM2603 via I²C
+ *    • verify correct blocking acquisition via I²S
+ *    • test IN → OUT loopback functionality
+ *    • measure the actual audio sampling frequency used
+ *      by the codec/I²S subsystem
+ *
+ *  Sampling Frequency Measurement
+ *  ------------------------------------------------------------
+ *  The ARM Cortex-A9 includes a 64-bit Global Timer clocked at:
+ *
+ *        CPU_Freq / 2  =  666 MHz / 2  ≈ 333 MHz
+ *
+ *  Only the lower 32 bits are used here, accessed through:
+ *
+ *        Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET)
+ *
+ *  The measurement procedure is:
+ *    1) read timer at sample n      → t0
+ *    2) read timer at sample n+1    → t1
+ *    3) compute Δ = t1 - t0 (timer cycles)
+ *    4) sampling period  Ts = Δ / 333 MHz
+ *    5) sampling frequency Fs = 1 / Ts
+ *
+ *  IMPORTANT:
+ *    The printing of t0/t1 results is performed *after* the
+ *    measurement has completed, ensuring that UART I/O does not
+ *    interfere with the timing, as required by the assignment.
+ *
+ *
+ *  Platform
+ *  ------------------------------------------------------------
+ *   • Board: Zybo Z7 (Zynq-7000)
+ *   • Audio Codec: Analog Devices SSM2603 (I²C control, I²S data)
+ *   • Interfaces:
+ *        – AXI-I2S for audio RX/TX
+ *        – AXI FIFO for streaming samples
+ *        – PS I²C for codec configuration
+ *        – PS Global Timer for frequency measurement
+ *   • Tools: Xilinx SDK / Vitis + UART terminal (115200 baud, 8N1)
+ *
+ ***************************************************************/
 
-/*
- * helloworld.c: simple test application
- *
- * This application configures UART 16550 to baud rate 9600.
- * PS7 UART (Zynq) is not initialized by this application, since
- * bootrom/bsp configures it to baud rate 115200
- *
- * ------------------------------------------------
- * | UART TYPE   BAUD RATE                        |
- * ------------------------------------------------
- *   uartns550   9600
- *   uartlite    Configurable only in HW design
- *   ps7_uart    115200 (configured by bootrom/bsp)
- */
 
 #include <stdio.h>
 #include "platform.h"
@@ -54,7 +65,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <math.h>
-
+#include "xil_io.h"
 
 /* I2S Register offsets */
 #define I2S_RESET_REG 		0x00
@@ -98,6 +109,9 @@
 #define FIR_FIFO XPAR_AXI_FIFO_MM_S_1_BASEADDR
 
 #define GLOBAL_TMR_BASEADDR XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
+
+#define GTIMER_COUNTER_LOWER_OFFSET 0x04   // offset per il contatore basso
+#define GLOBAL_TMR_FREQ 333000000          // Global Timer = CPU/2 = 333 MHz
 /* ------------------------------------------------------------ */
 /*				Low-Pass and High-Pass FIR filter coefficients									*/
 /* ------------------------------------------------------------ */
@@ -299,47 +313,62 @@ void initialize_FIFO(u32 fifoAddr){
 int main()
 {
 
-	init_platform();
+    init_platform();
 
-	print("Started!\n\r");
-    xil_printf("\n=== LAB3 ===\n");
+    print("Started!\n\r");
+    xil_printf("\n=== LAB3 – Loopback + Timer ===\n");
 
-	AudioInitialize(SCU_TIMER_ID, AUDIO_IIC_ID, AUDIO_CTRL_BASEADDR);
+    AudioInitialize(SCU_TIMER_ID, AUDIO_IIC_ID, AUDIO_CTRL_BASEADDR);
 
-	initialize_FIFO(AUDIO_FIFO);
-	initialize_FIFO(FIR_FIFO);
-
+    initialize_FIFO(AUDIO_FIFO);
 
 
 
 
-	int SampleL, SampleR;
 
 
+    int SampleL, SampleR;
 
-	int bufferL[N_HP], bufferR[N_HP];
+    // ---- Variabili per la misura del sampling interval ----
+    u32 t0 = 0;
+    u32 t1 = 0;
+    int captured = 0;
 
-	int j=0;
-	int times[2];
-	while (1){
+    xil_printf("Measuring sampling interval...\n");
 
-		SampleL = (int) I2SFifoRead(AUDIO_FIFO);
-		SampleR = (int) I2SFifoRead(AUDIO_FIFO);
-		if (j==300)
-			times[0]=Xil_In32(GLOBAL_TMR_BASEADDR );
-		if (j==301)
-		{
-			times[1]=Xil_In32(GLOBAL_TMR_BASEADDR );
-			xil_printf("time=%d, %d \r\n",times[1]-times[0],j);
-		}
-//update
-		//conv
+    while (1) {
 
-		I2SFifoWrite(AUDIO_FIFO, SampleL);
-		I2SFifoWrite(AUDIO_FIFO, SampleR);
-		if (j<=301)
-			j++;
-	}
-	cleanup_platform();
-	return 0;
+        // 1) Read stereo samples (L+R)
+        SampleL = (int) I2SFifoRead(AUDIO_FIFO);
+        SampleR = (int) I2SFifoRead(AUDIO_FIFO);
+
+        // 2) Misura del periodo di campionamento (una sola volta)
+        if (captured == 0) {
+            t0 = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+            captured = 1;
+        }
+        else if (captured == 1) {
+            t1 = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+            captured = 2;
+        }
+
+        // 3) Stampa una sola volta, senza interferire con la misura
+        if (captured == 2) {
+            captured = 3; // evita ripetizioni
+
+            u32 delta = t1 - t0;
+            float Ts = (float)delta / GLOBAL_TMR_FREQ;  // periodo in secondi
+            float Fs = 1.0f / Ts;                       // frequenza di campionamento
+
+            xil_printf("Delta cycles = %u\n", delta);
+            xil_printf("Sampling frequency ≈ %.2f Hz\n", Fs);
+        }
+
+        // 4) Loopback
+        I2SFifoWrite(AUDIO_FIFO, SampleL);
+        I2SFifoWrite(AUDIO_FIFO, SampleR);
+    }
+
+    cleanup_platform();
+    return 0;
 }

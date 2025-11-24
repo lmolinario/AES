@@ -1,49 +1,70 @@
-/******************************************************************************
-*
-* Copyright (C) 2009 - 2014 Xilinx, Inc.  All rights reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* Use of the Software is limited solely to applications:
-* (a) running on a Xilinx device, or
-* (b) that interact with a Xilinx device through a bus or interconnect.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-* XILINX  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-* WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
-* OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*
-* Except as contained in this notice, the name of the Xilinx shall not be used
-* in advertising or otherwise to promote the sale, use or other dealings in
-* this Software without prior written authorization from Xilinx.
-*
-******************************************************************************/
+/***************************************************************
+ *  Lab 3 – FIR Audio Filtering (Step 2)
+ *  Author: Lello Molinario
+ *  University of Cagliari – Advanced Embedded Systems (AES)
+ *  Student ID: 70/90/000369
+ *  Date: November 2025
+ *
+ *  Description
+ *  ------------------------------------------------------------
+ *  Real-time FIR audio filtering implemented in software on the
+ *  Zybo Z7 platform. The program acquires stereo audio samples
+ *  (Left + Right) from the SSM2603 codec via AXI-I2S, stores
+ *  them in a sliding window, and applies a configurable FIR
+ *  convolution before sending the filtered samples back to the
+ *  output FIFO.
+ *
+ *  The goal of STEP 2 is to:
+ *    • implement a generic FIR filter function
+ *    • apply convolution over a sliding window of past samples
+ *    • allow selection of the filtering mode via board switches
+ *    • support both Low-Pass (LP) and High-Pass (HP) filters
+ *    • preserve clean passthrough audio when no filter is selected
+ *
+ *  FIR Filtering
+ *  ------------------------------------------------------------
+ *  The filtering operation is implemented as a standard FIR:
+ *
+ *        y[n] = h0·x[n] + h1·x[n−1] + … + hN·x[n−N]
+ *
+ *  where:
+ *     • x[n]   = current input sample
+ *     • h[k]   = FIR coefficients (filter kernel)
+ *     • N      = number of taps (LP or HP)
+ *
+ *  A sliding buffer stores the latest N input samples, updated
+ *  each iteration by shifting the window and inserting x[n] at
+ *  index 0. A flexible FIR function computes the convolution
+ *  for any tap size, enabling easy testing of alternative
+ *  kernels or more aggressive filter shapes.
+ *
+ *  Filter Selection (Using Switches)
+ *  ------------------------------------------------------------
+ *    SW0 = 1   → enable Low-Pass filter  (LP)
+ *    SW1 = 1   → enable High-Pass filter (HP)
+ *    Otherwise → raw audio passthrough (clean)
+ *
+ *  Additional Notes
+ *  ------------------------------------------------------------
+ *  • The FIR implementation is fully software-based.
+ *  • Coefficients are defined at the top of main.c.
+ *  • More aggressive LP/HP kernels may be substituted as needed.
+ *  • External tone generators (e.g. szynalski.com/tone-generator)
+ *    can be used to validate filter behavior.
+ *
+ *
+ *  Platform
+ *  ------------------------------------------------------------
+ *   • Board: Zybo Z7 (Zynq-7000)
+ *   • Audio Codec: Analog Devices SSM2603 (I²C control, I²S data)
+ *   • Interfaces:
+ *        – AXI-I2S for audio RX/TX streaming
+ *        – AXI FIFO for sample buffering
+ *        – PS I²C for codec configuration
+ *   • Tools: Xilinx SDK / Vitis + UART terminal (115200 baud, 8N1)
+ *
+ ***************************************************************/
 
-/*
- * helloworld.c: simple test application
- *
- * This application configures UART 16550 to baud rate 9600.
- * PS7 UART (Zynq) is not initialized by this application, since
- * bootrom/bsp configures it to baud rate 115200
- *
- * ------------------------------------------------
- * | UART TYPE   BAUD RATE                        |
- * ------------------------------------------------
- *   uartns550   9600
- *   uartlite    Configurable only in HW design
- *   ps7_uart    115200 (configured by bootrom/bsp)
- */
 
 #include <stdio.h>
 #include "platform.h"
@@ -54,17 +75,13 @@
 #include <time.h>
 #include <stdlib.h>
 #include <math.h>
-
-
 /* I2S Register offsets */
 #define I2S_RESET_REG 		0x00
 #define I2S_CTRL_REG 		0x04
 #define I2S_CLK_CTRL_REG 	0x08
-
 #define I2S_FIFO_STS_REG 	0x20
 #define I2S_RX_FIFO_REG 	0x28
 #define I2S_TX_FIFO_REG 	0x2C
-
 
 #define FIFO_ISR ( 0x00)
 #define FIFO_IER ( 0x04)
@@ -296,50 +313,84 @@ void initialize_FIFO(u32 fifoAddr){
 
 }
 
+
+// FIR GENERICO: y[n] = sum_{k=0}^{taps-1} h[k] * x[n-k]
+int FIR_filter(int *buffer, float *coeff, int taps)
+{
+    float acc = 0.0f;
+
+    for (int k = 0; k < taps; k++) {
+        acc += coeff[k] * (float)buffer[k];
+    }
+
+    return (int)acc;   // ritorna il campione filtrato come int
+}
+
+
+
 int main()
 {
+    init_platform();
 
-	init_platform();
+    print("Started!\n\r");
+    xil_printf("\n=== LAB3 – Step 2: FIR Filtering ===\n");
 
-	print("Started!\n\r");
-    xil_printf("\n=== LAB3 ===\n");
+    AudioInitialize(SCU_TIMER_ID, AUDIO_IIC_ID, AUDIO_CTRL_BASEADDR);
 
-	AudioInitialize(SCU_TIMER_ID, AUDIO_IIC_ID, AUDIO_CTRL_BASEADDR);
+    initialize_FIFO(AUDIO_FIFO);
+    initialize_FIFO(FIR_FIFO);
 
-	initialize_FIFO(AUDIO_FIFO);
-	initialize_FIFO(FIR_FIFO);
+    int SampleL, SampleR;
 
+    // Buffer per la convoluzione FIR (uso dimensione N_HP, la più grande)
+    int bufferL[N_HP], bufferR[N_HP];
 
+    // Inizializza i buffer a zero
+    for (int i = 0; i < N_HP; i++) {
+        bufferL[i] = 0;
+        bufferR[i] = 0;
+    }
 
+    while (1) {
 
+        // --- ACQUISIZIONE ---
+        SampleL = (int) I2SFifoRead(AUDIO_FIFO);
+        SampleR = (int) I2SFifoRead(AUDIO_FIFO);
 
-	int SampleL, SampleR;
+        // --- SLIDING WINDOW: shift a destra ---
+        for (int i = N_HP - 1; i > 0; i--) {
+            bufferL[i] = bufferL[i - 1];
+            bufferR[i] = bufferR[i - 1];
+        }
+        bufferL[0] = SampleL;
+        bufferR[0] = SampleR;
 
+        // --- SELEZIONE FILTRO TRAMITE SWITCH ---
+        u32 sw = Xil_In32(SWI_BASE_ADDR);
 
+        int outL, outR;
 
-	int bufferL[N_HP], bufferR[N_HP];
+        if (sw & 0x1) {
+            // SW0 ON → Low-pass
+            outL = FIR_filter(bufferL, LP, N_LP);
+            outR = FIR_filter(bufferR, LP, N_LP);
+        }
+        else if (sw & 0x2) {
+            // SW1 ON → High-pass
+            outL = FIR_filter(bufferL, HP, N_HP);
+            outR = FIR_filter(bufferR, HP, N_HP);
+        }
+        else {
+            // Nessun filtro selezionato → loopback “clean”
+            outL = SampleL;
+            outR = SampleR;
+        }
 
-	int j=0;
-	int times[2];
-	while (1){
+        // --- OUTPUT ---
+        I2SFifoWrite(AUDIO_FIFO, outL);
+        I2SFifoWrite(AUDIO_FIFO, outR);
+    }
 
-		SampleL = (int) I2SFifoRead(AUDIO_FIFO);
-		SampleR = (int) I2SFifoRead(AUDIO_FIFO);
-		if (j==300)
-			times[0]=Xil_In32(GLOBAL_TMR_BASEADDR );
-		if (j==301)
-		{
-			times[1]=Xil_In32(GLOBAL_TMR_BASEADDR );
-			xil_printf("time=%d, %d \r\n",times[1]-times[0],j);
-		}
-//update
-		//conv
-
-		I2SFifoWrite(AUDIO_FIFO, SampleL);
-		I2SFifoWrite(AUDIO_FIFO, SampleR);
-		if (j<=301)
-			j++;
-	}
-	cleanup_platform();
-	return 0;
+    cleanup_platform();
+    return 0;
 }

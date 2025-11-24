@@ -54,17 +54,17 @@
 #include <time.h>
 #include <stdlib.h>
 #include <math.h>
+#include "xil_cache.h"   // per disattivare cache
+
 
 
 /* I2S Register offsets */
 #define I2S_RESET_REG 		0x00
 #define I2S_CTRL_REG 		0x04
 #define I2S_CLK_CTRL_REG 	0x08
-
 #define I2S_FIFO_STS_REG 	0x20
 #define I2S_RX_FIFO_REG 	0x28
 #define I2S_TX_FIFO_REG 	0x2C
-
 
 #define FIFO_ISR ( 0x00)
 #define FIFO_IER ( 0x04)
@@ -296,50 +296,138 @@ void initialize_FIFO(u32 fifoAddr){
 
 }
 
+
+// FIR GENERICO: y[n] = sum_{k=0}^{taps-1} h[k] * x[n-k]
+int FIR_filter(int *buffer, float *coeff, int taps)
+{
+    float acc = 0.0f;
+
+    for (int k = 0; k < taps; k++) {
+        acc += coeff[k] * (float)buffer[k];
+    }
+
+    return (int)acc;   // ritorna il campione filtrato come int
+}
+
+
+
 int main()
 {
+    init_platform();
 
-	init_platform();
+    print("Started!\n\r");
+    xil_printf("\n=== LAB3 – Step 2: FIR Filtering ===\n");
 
-	print("Started!\n\r");
-    xil_printf("\n=== LAB3 ===\n");
+    AudioInitialize(SCU_TIMER_ID, AUDIO_IIC_ID, AUDIO_CTRL_BASEADDR);
 
-	AudioInitialize(SCU_TIMER_ID, AUDIO_IIC_ID, AUDIO_CTRL_BASEADDR);
+    initialize_FIFO(AUDIO_FIFO);
+    initialize_FIFO(FIR_FIFO);
+        /* ---------------------------------------------
+     * STEP 3 - Minimal Global Timer measurement
+     * --------------------------------------------- */
 
-	initialize_FIFO(AUDIO_FIFO);
-	initialize_FIFO(FIR_FIFO);
+    volatile int dummy;
+    int t_start, t_end;
+    int k;
+
+    /* preparo buffer di input per il FIR */
+    int test_buffer[N_HP];
+    for (k = 0; k < N_HP; k++)
+        test_buffer[k] = (k * 7);
 
 
+    /************* MISURA CON CACHE ABILITATE *************/
+    xil_printf("\n=== FIR TIMING (CACHE ON) ===\n");
+
+    /* time start */
+    t_start = Xil_In32(GLOBAL_TMR_BASEADDR);
+
+    /* eseguo il filtro un certo numero di volte */
+    for (k = 0; k < 1000; k++)
+        dummy = FIR_filter(test_buffer, HP, N_HP);
+
+    /* time end */
+    t_end = Xil_In32(GLOBAL_TMR_BASEADDR);
+
+    xil_printf("HP cache ON: ticks = %d\n", (t_end - t_start));
 
 
+    /************* DISABILITO CACHE *************/
+    Xil_DCacheDisable();
+    Xil_ICacheDisable();
 
-	int SampleL, SampleR;
+    /************* MISURA CON CACHE DISABILITATE *************/
+    xil_printf("\n=== FIR TIMING (CACHE OFF) ===\n");
 
+    /* time start */
+    t_start = Xil_In32(GLOBAL_TMR_BASEADDR);
 
+    /* eseguo di nuovo */
+    for (k = 0; k < 1000; k++)
+        dummy = FIR_filter(test_buffer, HP, N_HP);
 
-	int bufferL[N_HP], bufferR[N_HP];
+    /* time end */
+    t_end = Xil_In32(GLOBAL_TMR_BASEADDR);
 
-	int j=0;
-	int times[2];
-	while (1){
+    xil_printf("HP cache OFF: ticks = %d\n", (t_end - t_start));
 
-		SampleL = (int) I2SFifoRead(AUDIO_FIFO);
-		SampleR = (int) I2SFifoRead(AUDIO_FIFO);
-		if (j==300)
-			times[0]=Xil_In32(GLOBAL_TMR_BASEADDR );
-		if (j==301)
-		{
-			times[1]=Xil_In32(GLOBAL_TMR_BASEADDR );
-			xil_printf("time=%d, %d \r\n",times[1]-times[0],j);
-		}
-//update
-		//conv
+    /************* RIABILITO CACHE *************/
+    Xil_DCacheEnable();
+    Xil_ICacheEnable();
 
-		I2SFifoWrite(AUDIO_FIFO, SampleL);
-		I2SFifoWrite(AUDIO_FIFO, SampleR);
-		if (j<=301)
-			j++;
-	}
-	cleanup_platform();
-	return 0;
+    xil_printf("\nTIMING DONE – avvio streaming audio...\n");
+
+    int SampleL, SampleR;
+
+    // Buffer per la convoluzione FIR (uso dimensione N_HP, la più grande)
+    int bufferL[N_HP], bufferR[N_HP];
+
+    // Inizializza i buffer a zero
+    for (int i = 0; i < N_HP; i++) {
+        bufferL[i] = 0;
+        bufferR[i] = 0;
+    }
+
+    while (1) {
+
+        // --- ACQUISIZIONE ---
+        SampleL = (int) I2SFifoRead(AUDIO_FIFO);
+        SampleR = (int) I2SFifoRead(AUDIO_FIFO);
+
+        // --- SLIDING WINDOW: shift a destra ---
+        for (int i = N_HP - 1; i > 0; i--) {
+            bufferL[i] = bufferL[i - 1];
+            bufferR[i] = bufferR[i - 1];
+        }
+        bufferL[0] = SampleL;
+        bufferR[0] = SampleR;
+
+        // --- SELEZIONE FILTRO TRAMITE SWITCH ---
+        u32 sw = Xil_In32(SWI_BASE_ADDR);
+
+        int outL, outR;
+
+        if (sw & 0x1) {
+            // SW0 ON → Low-pass
+            outL = FIR_filter(bufferL, LP, N_LP);
+            outR = FIR_filter(bufferR, LP, N_LP);
+        }
+        else if (sw & 0x2) {
+            // SW1 ON → High-pass
+            outL = FIR_filter(bufferL, HP, N_HP);
+            outR = FIR_filter(bufferR, HP, N_HP);
+        }
+        else {
+            // Nessun filtro selezionato → loopback “clean”
+            outL = SampleL;
+            outR = SampleR;
+        }
+
+        // --- OUTPUT ---
+        I2SFifoWrite(AUDIO_FIFO, outL);
+        I2SFifoWrite(AUDIO_FIFO, outR);
+    }
+
+    cleanup_platform();
+    return 0;
 }
