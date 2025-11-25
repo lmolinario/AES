@@ -40,7 +40,7 @@ The **SSM2603** handles audio ADC/DAC; its configuration registers are written v
 
 ---
 <p align="center">
-  <img src="img/Zybo_ADDA.jpg" alt="Zybo Z7 board used in the labs" width="650"/>
+  <img src="../img/Zybo_ADDA.jpg" alt="Zybo Z7 board used in the labs" width="650"/>
 </p>
 *Photo taken during AES Lab*
 
