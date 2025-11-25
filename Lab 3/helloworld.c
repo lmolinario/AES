@@ -96,7 +96,6 @@
 #define AUDIO_FIFO XPAR_AXI_FIFO_MM_S_0_BASEADDR
 
 #define FIR_FIFO XPAR_AXI_FIFO_MM_S_1_BASEADDR
-
 #define GLOBAL_TMR_BASEADDR XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
 /* ------------------------------------------------------------ */
 /*				Low-Pass and High-Pass FIR filter coefficients									*/

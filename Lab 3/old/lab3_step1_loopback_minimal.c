@@ -107,11 +107,10 @@
 #define AUDIO_FIFO XPAR_AXI_FIFO_MM_S_0_BASEADDR
 
 #define FIR_FIFO XPAR_AXI_FIFO_MM_S_1_BASEADDR
+#define GLOBAL_TMR_BASEADDR          XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
 
-#define GLOBAL_TMR_BASEADDR XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
-
-#define GTIMER_COUNTER_LOWER_OFFSET 0x04   // offset per il contatore basso
-#define GLOBAL_TMR_FREQ 333000000          // Global Timer = CPU/2 = 333 MHz
+#define GTIMER_CONTROL_OFFSET        0x08   // Control register
+#define GLOBAL_TMR_FREQ              333000000  // 333 MHz
 /* ------------------------------------------------------------ */
 /*				Low-Pass and High-Pass FIR filter coefficients									*/
 /* ------------------------------------------------------------ */
@@ -306,67 +305,113 @@ void initialize_FIFO(u32 fifoAddr){
 	    print("write FIFO_ISR\n");
 	    Xil_Out32(fifoAddr + FIFO_ISR, 0x00100000);
 
-
-
 }
+
 
 int main()
 {
-
     init_platform();
 
-    print("Started!\n\r");
-    xil_printf("\n=== LAB3 – Loopback + Timer ===\n");
+    xil_printf("=== LAB 3 – Step 1: Fs Measurement (Global Timer) ===\n\r");
 
+    /* Enable Global Timer: bit0=enable, bit1=auto-inc */
+    Xil_Out32(GLOBAL_TMR_BASEADDR + GTIMER_CONTROL_OFFSET, 0x03);
+
+    /* Inizializza codec + I2S usando la versione a 3 parametri */
     AudioInitialize(SCU_TIMER_ID, AUDIO_IIC_ID, AUDIO_CTRL_BASEADDR);
 
     initialize_FIFO(AUDIO_FIFO);
 
+    /**************************************************************************
+     * ENABLE DEL GLOBAL TIMER — REGISTRO CONTROL
+     *
+     * Nel codice originale il timer NON veniva abilitato → il contatore
+     * rimaneva sempre fermo a 0.
+     *
+     * Qui invece abilitiamo correttamente:
+     *   bit0 = ENABLE
+     *   bit1 = AUTO-INCREMENT
+     *
+     * Scrittura corretta nel CONTROL REGISTER:
+     *   CONTROL = 0x03
+     *
+     * Senza questa istruzione, ogni lettura successiva darebbe 0 → delta = 0.
+     *************************************************************************/
 
 
+    u32 t0 = 0, t1 = 0;
+    int j = 0;
+
+    while (1)
+    {
+        /* Stereo sample */
+        u32 L = I2SFifoRead(AUDIO_FIFO);
+        u32 R = I2SFifoRead(AUDIO_FIFO);
 
 
+        /**************************************************************************
+         * LETTURA CORRETTA DEL CONTATORE 32 BIT (LSB)
+         *
+         * NEL CODICE DI ESEMPIO FORNITO DAL PROFESSORE:
+         *   times[0] = Xil_In32(GLOBAL_TMR_BASEADDR);
+         *
+         * → Legge l'indirizzo base: NON il contatore, ma il CONTROL REGISTER,
+         *   quindi sempre 0 → misurazione impossibile.
+         *
+         * VERSIONE CORRETTA QUI:
+         *   Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET)
+         *
+         * Così leggiamo realmente il CONTATORE (tick del Global Timer).
+         *************************************************************************/
 
-    int SampleL, SampleR;
-
-    // ---- Variabili per la misura del sampling interval ----
-    u32 t0 = 0;
-    u32 t1 = 0;
-    int captured = 0;
-
-    xil_printf("Measuring sampling interval...\n");
-
-    while (1) {
-
-        // 1) Read stereo samples (L+R)
-        SampleL = (int) I2SFifoRead(AUDIO_FIFO);
-        SampleR = (int) I2SFifoRead(AUDIO_FIFO);
-
-        // 2) Misura del periodo di campionamento (una sola volta)
-        if (captured == 0) {
+        /* Global Timer measurement */
+        if (j == 300)
             t0 = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
-            captured = 1;
-        }
-        else if (captured == 1) {
-            t1 = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
-            captured = 2;
-        }
 
-        // 3) Stampa una sola volta, senza interferire con la misura
-        if (captured == 2) {
-            captured = 3; // evita ripetizioni
+        if (j == 301)
+        {
+            t1 = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
 
             u32 delta = t1 - t0;
-            float Ts = (float)delta / GLOBAL_TMR_FREQ;  // periodo in secondi
-            float Fs = 1.0f / Ts;                       // frequenza di campionamento
 
-            xil_printf("Delta cycles = %u\n", delta);
-            xil_printf("Sampling frequency ≈ %.2f Hz\n", Fs);
+            /**********************************************************************
+             * CALCOLO CORRETTO DELLA FREQUENZA DI CAMPIONAMENTO (Fs)
+             *
+             * CPU clock = 667 MHz
+             * Global Timer clock = CPU/2 → 333 MHz
+             *
+             * Quindi:
+             *   1 tick = 1 / 333e6 = 3 ns
+             *
+             * Frequenza di campionamento Fs:
+             *   Fs = clock_timer / delta
+             *      = 333 MHz / delta
+             *
+             **********************************************************************/
+            float Fs = 333000000.0f / (float)delta;
+            int Fs100 = (int)(Fs * 100);
+
+            /**********************************************************************
+             * STAMPA NON DISTURBANTE
+             *
+             * Nel primo codice le stampe di initialize_FIFO() introdussero ritardi
+             * enormi → misurazione NON più affidabile.
+             *
+             * Ora stampiamo SOLO dopo t0 e t1 → nessuna interferenza.
+             **********************************************************************/
+            xil_printf("Δticks = %u   Fs ≈ %d.%02d Hz\n\r",
+                       delta,
+                       Fs100 / 100,
+                       Fs100 % 100);
+
         }
 
-        // 4) Loopback
-        I2SFifoWrite(AUDIO_FIFO, SampleL);
-        I2SFifoWrite(AUDIO_FIFO, SampleR);
+
+        /* Loopback */
+        I2SFifoWrite(AUDIO_FIFO, L);
+        I2SFifoWrite(AUDIO_FIFO, R);
+
+        if (j <= 301) j++;
     }
 
     cleanup_platform();

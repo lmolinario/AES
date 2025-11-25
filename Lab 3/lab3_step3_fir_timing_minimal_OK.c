@@ -1,49 +1,74 @@
-/******************************************************************************
-*
-* Copyright (C) 2009 - 2014 Xilinx, Inc.  All rights reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* Use of the Software is limited solely to applications:
-* (a) running on a Xilinx device, or
-* (b) that interact with a Xilinx device through a bus or interconnect.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-* XILINX  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-* WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
-* OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*
-* Except as contained in this notice, the name of the Xilinx shall not be used
-* in advertising or otherwise to promote the sale, use or other dealings in
-* this Software without prior written authorization from Xilinx.
-*
-******************************************************************************/
+/***************************************************************
 
-/*
- * helloworld.c: simple test application
+* **Lab 3 – FIR Execution-Time Analysis (Step 3)**
+* Author: Lello Molinario
+* University of Cagliari – Advanced Embedded Systems (AES)
+* Student ID: 70/90/000369
+* Date: November 2025
+*
+* Description
+*  ------------------------------------------------------------
+* Execution-time evaluation of the software FIR filter running
+* on the ARM Cortex-A9 subsystem of the Zybo Z7 platform.
+* This step extends the FIR implementation developed in Step 2
+* by introducing precise cycle-level timing measurements for
+* the filter routine, allowing assessment of real-time
+* feasibility under the constraints of audio streaming.
+*
+* The goal of STEP 3 is to:
+* • measure the execution time of FIR_filter()
+* • determine cycles available per sample (given Fs ≈ 48 kHz)
+* • estimate the maximum number of FIR taps executable in real time without violating the sampling period
+* • compare performance with CPU caches enabled vs disabled
+* • ensure that filtering keeps up with the I²S data rate
+*
+* Timing Measurement
+*  ------------------------------------------------------------
+* Timing is performed using the ARM Global Timer, a 64-bit
+* counter clocked at:
+*       CPU_Freq / 2  ≈ 333 MHz
+*
+* The lower 32 bits are read using:
+*
+*     Xil_In32(GLOBAL_TMR_BASEADDR);
+*
+* Measurement procedure:
+* 1. read timer → t_start
+* 2. execute FIR_filter() repeatedly (e.g., 1000 iterations)
+* 3. read timer → t_end
+* 4. compute Δ = t_end − t_start
+* 5. compute cycles_per_call = Δ / iterations
+*
+* Cache-disabled tests are performed using:
+*
+*     Xil_ICacheDisable();
+*
+*     Xil_DCacheDisable();
+*
+* A comparison between cached vs non-cached performance
+* provides insight into worst-case execution time.
+*
+* Real-Time Constraint
+*  ------------------------------------------------------------
+* With Fs ≈ 48 kHz, the available processing time per sample is:
+*
+*     cycles_per_sample = (333 MHz / 48000) ≈ 6937 cycles
+*
+* This upper bound determines the maximum FIR complexity
+* sustainable in real-time audio processing.
+*
+ *  Platform
+ *  ------------------------------------------------------------
+ *   • Board: Zybo Z7 (Zynq-7000)
+ *   • Audio Codec: Analog Devices SSM2603 (I²C control, I²S data)
+ *   • Interfaces:
+ *        – AXI-I2S for audio RX/TX streaming
+ *        – AXI FIFO for sample buffering
+ *        – PS I²C for codec configuration
+ *   • Tools: Xilinx SDK / Vitis + UART terminal (115200 baud, 8N1)
  *
- * This application configures UART 16550 to baud rate 9600.
- * PS7 UART (Zynq) is not initialized by this application, since
- * bootrom/bsp configures it to baud rate 115200
- *
- * ------------------------------------------------
- * | UART TYPE   BAUD RATE                        |
- * ------------------------------------------------
- *   uartns550   9600
- *   uartlite    Configurable only in HW design
- *   ps7_uart    115200 (configured by bootrom/bsp)
- */
+ ***************************************************************/
+
 
 #include <stdio.h>
 #include "platform.h"
