@@ -106,9 +106,15 @@ float fir_filter(float sample, float *h, float *buffer, int N);
 * Apply filtering **per-channel** (Left and Right independently)
 * Use switches to select:
 
-  * **SW0 = unfiltered / filtered**
-  * (optional) **SW1 = filter type (LP / HP)**
+- **SW0 = enable Low-Pass filter (LP)**
+- **SW1 = enable High-Pass filter (HP)**
+- **SW2 = enable Low-Pass (aggressive) filter**
+- **SW3 = enable High-Pass (aggressive) filter**
+- **If none active → raw passthrough**
 
+
+Only one filter should be active at a time; priority is evaluated in this order:
+`SW0 → SW1 → SW2 → SW3`.
 ### Testing:
 
 You may use online tone generators such as:
