@@ -37,9 +37,9 @@
  *    5) sampling frequency Fs = 1 / Ts
  *
  *  IMPORTANT:
- *    The printing of t0/t1 results is performed *after* the
- *    measurement has completed, ensuring that UART I/O does not
- *    interfere with the timing, as required by the assignment.
+ *    UART printing is performed only after t0/t1 are acquired,
+ *    ensuring that serial I/O does not perturb the measurement,
+ *    as required by the assignment.
  *
  *
  *  Platform
@@ -48,9 +48,9 @@
  *   • Audio Codec: Analog Devices SSM2603 (I²C control, I²S data)
  *   • Interfaces:
  *        – AXI-I2S for audio RX/TX
- *        – AXI FIFO for streaming samples
+ *        – AXI FIFO for sample buffering
  *        – PS I²C for codec configuration
- *        – PS Global Timer for frequency measurement
+ *        – PS Global Timer for timing analysis
  *   • Tools: Xilinx SDK / Vitis + UART terminal (115200 baud, 8N1)
  *
  ***************************************************************/

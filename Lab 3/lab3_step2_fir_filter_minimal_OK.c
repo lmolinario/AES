@@ -40,17 +40,21 @@
  *
  *  Filter Selection (Using Switches)
  *  ------------------------------------------------------------
- *    SW0 = 1   → enable Low-Pass filter  (LP)
- *    SW1 = 1   → enable High-Pass filter (HP)
+ *    SW0 = 1  → enable Low-Pass filter (LP)
+ *    SW1 = 1  → enable High-Pass filter (HP)
+ *    SW2 = 1  → enable Low-Pass (aggressive) filter
+ *    SW3 = 1  → enable High-Pass (aggressive) filter
  *    Otherwise → raw audio passthrough (clean)
  *
- *  Additional Notes
+ *  Notes on Filter Behavior
  *  ------------------------------------------------------------
- *  • The FIR implementation is fully software-based.
- *  • Coefficients are defined at the top of main.c.
- *  • More aggressive LP/HP kernels may be substituted as needed.
+ *  • Only one filter should be active at a time; priority follows
+ *    the order SW0 → SW1 → SW2 → SW3.
+ *  • Aggressive filters use extended kernels (higher tap count),
+ *    giving steeper roll-off.
+ *  • Clean passthrough preserves the original audio stream.
  *  • External tone generators (e.g. szynalski.com/tone-generator)
- *    can be used to validate filter behavior.
+ *    can be used to validate the filter response in real time.
  *
  *
  *  Platform
