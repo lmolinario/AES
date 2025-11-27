@@ -127,37 +127,6 @@
 #define N_LP 20 // ordine filtro
 #define N_HP 21 // ordine filtro
 
-/* Aggressive Low-Pass (29 taps) */
-#define coeffLP_AGG  \
--0.008747420411798365, -0.01352684070757768, -0.021069157456114974, \
--0.02821205662046602, -0.03288466862750655, -0.032820056352546804, \
--0.026015856418133178, -0.011326253746998683, 0.01118086152569252, \
-0.039926269347420495, 0.07195575020178693, 0.10331516426959793, \
-0.12972205191226951, 0.14735052987683003, 0.15353880775461448, \
-0.14735052987683003, 0.12972205191226951, 0.10331516426959793, \
-0.07195575020178693, 0.039926269347420495, 0.01118086152569252, \
--0.011326253746998683, -0.026015856418133178, -0.032820056352546804, \
--0.03288466862750655, -0.02821205662046602, -0.021069157456114974, \
--0.01352684070757768, -0.008747420411798365
-#define N_LP_AGG 29
-
-/* Aggressive High-Pass (25 taps) */
-#define coeffHP_AGG \
-0.05946436587252379, -0.08266255914551396, -0.032374303236116855, \
-0.00216595808715192, 0.02865430955587078, 0.045067235048989344, \
-0.04435253660179216, 0.02016730464237364, -0.027703198625664668, \
--0.0913071374380985, -0.15595705304807897, -0.2038996657538856, \
-0.7782265468798992, -0.2038996657538856, -0.15595705304807897, \
--0.0913071374380985, -0.027703198625664668, 0.02016730464237364, \
-0.04435253660179216, 0.045067235048989344, 0.02865430955587078, \
-0.00216595808715192, -0.032374303236116855, -0.08266255914551396, \
-0.05946436587252379
-#define N_HP_AGG 25
-
-/* Create coefficient arrays */
-float LP_AGG[] = { coeffLP_AGG };
-float HP_AGG[] = { coeffHP_AGG };
-
 float LP[]={coeffLP};
 float HP[]={coeffHP};
 
@@ -313,11 +282,34 @@ void initialize_FIFO(u32 fifoAddr){
 	Xil_Out32(AUDIO_FIFO + 0x2c, 0);
 
 	    // init
+	    xil_printf("FIFO_ISR:  0x%08x\n",Xil_In32(fifoAddr + FIFO_ISR));
+	    print("write FIFO_ISR\n\r");
 	    Xil_Out32(fifoAddr + FIFO_ISR, 0xFFFFFFFF);
+	    xil_printf("FIFO_ISR:  0x%08x\n",Xil_In32(fifoAddr + FIFO_ISR));
+	    xil_printf("FIFO_IER:  0x%08x\n",Xil_In32(fifoAddr + FIFO_IER));
+	    xil_printf("FIFO_TDFV: 0x%08x\n",Xil_In32(fifoAddr + FIFO_TDFV));
+	    xil_printf("FIFO_RDFO: 0x%08x\n",Xil_In32(fifoAddr + FIFO_RDFO));
+
+	    print("Write IER\n\r");
 	    Xil_Out32(fifoAddr + FIFO_IER, 0x0C000000);
+
+	    print("Write TDR\n\r");
 	    Xil_Out32(fifoAddr + FIFO_TDR, 0x00000000);
+
+
+	    xil_printf("FIFO_ISR:  0x%08x\n",Xil_In32(fifoAddr + FIFO_ISR));
+		print("write FIFO_ISR\n\r");
 		Xil_Out32(fifoAddr + FIFO_ISR, 0xFFFFFFFF);
+		xil_printf("FIFO_ISR:  0x%08x\n",Xil_In32(fifoAddr + FIFO_ISR));
+		xil_printf("FIFO_IER:  0x%08x\n",Xil_In32(fifoAddr + FIFO_IER));
+		xil_printf("FIFO_TDFV: 0x%08x\n",Xil_In32(fifoAddr + FIFO_TDFV));
+		xil_printf("FIFO_RDFO: 0x%08x\n",Xil_In32(fifoAddr + FIFO_RDFO));
+
+
+	    print("write FIFO_IER\n");
 	    Xil_Out32(fifoAddr + FIFO_IER, 0x04100000);
+	    xil_printf("FIFO_ISR:  0x%08x\n",Xil_In32(fifoAddr + FIFO_ISR));
+	    print("write FIFO_ISR\n");
 	    Xil_Out32(fifoAddr + FIFO_ISR, 0x00100000);
 
 
@@ -359,18 +351,7 @@ int main()
     /* Initialize the underlying BSP (UART, caches, stdout redirection, etc.)
      * This is required before any I/O or platform-specific operations. */
     print("Started!\n\r");
-
-    xil_printf("\n=== LAB3 – Step 2: FIR Filtering ===\n\r");
-
-    xil_printf("\nFilter selection via board switches:\n\r");
-
-    xil_printf("\n  SW0 = 1  →  Low-Pass filter  (basic kernel)\n\r");
-    xil_printf("\n  SW1 = 1  →  High-Pass filter (basic kernel)\n\r");
-    xil_printf("\n  SW2 = 1  →  Low-Pass filter  (aggressive kernel)\n\r");
-    xil_printf("\n  SW3 = 1  →  High-Pass filter (aggressive kernel)\n\r");
-    xil_printf("\n  No switches ON → raw audio passthrough\n");
-    xil_printf(" \n\n");
-
+    xil_printf("\n=== LAB3 – Step 2: FIR Filtering ===\n");
 
     /* Initialize the audio subsystem:
      *  - configure the SSM2603 codec via I²C
@@ -381,10 +362,11 @@ int main()
 
     /* Initialize both AXI FIFOs:
      *  - AUDIO_FIFO handles samples coming from / going to the I²S interface
+     *  - FIR_FIFO is reserved for possible hardware acceleration
      * The initialization sequence clears pending flags and configures control bits.
      */
-
     initialize_FIFO(AUDIO_FIFO);
+    //initialize_FIFO(FIR_FIFO); //not necessary
 
     int SampleL, SampleR; // temporary storage for incoming stereo samples
 
@@ -442,31 +424,20 @@ int main()
         int outL, outR;
 
         if (sw & 0x1) {
-            // SW0 → Low-Pass (base)
+            // SW0 ON → apply Low-Pass FIR
             outL = FIR_filter(bufferL, LP, N_LP);
             outR = FIR_filter(bufferR, LP, N_LP);
         }
         else if (sw & 0x2) {
-            // SW1 → High-Pass (base)
+            // SW1 ON → apply High-Pass FIR
             outL = FIR_filter(bufferL, HP, N_HP);
             outR = FIR_filter(bufferR, HP, N_HP);
         }
-        else if (sw & 0x4) {
-            // SW2 → Low-Pass (aggressive)
-            outL = FIR_filter(bufferL, LP_AGG, N_LP_AGG);
-            outR = FIR_filter(bufferR, LP_AGG, N_LP_AGG);
-        }
-        else if (sw & 0x8) {
-            // SW3 → High-Pass (aggressive)
-            outL = FIR_filter(bufferL, HP_AGG, N_HP_AGG);
-            outR = FIR_filter(bufferR, HP_AGG, N_HP_AGG);
-        }
         else {
-            // No filter → clean passthrough
+            // No filter selected → clean loopback
             outL = SampleL;
             outR = SampleR;
         }
-
 
         /* -----------------------------
          *          OUTPUT STAGE

@@ -301,7 +301,7 @@ void initialize_FIFO(u32 fifoAddr){
 	    Xil_Out32(fifoAddr + FIFO_TDR, 0x00000000);
 		Xil_Out32(fifoAddr + FIFO_ISR, 0xFFFFFFFF);
 	    Xil_Out32(fifoAddr + FIFO_IER, 0x04100000);
-		Xil_Out32(fifoAddr + FIFO_ISR, 0x00100000);
+		    Xil_Out32(fifoAddr + FIFO_ISR, 0x00100000);
 
 
 
