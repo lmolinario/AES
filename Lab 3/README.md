@@ -100,7 +100,7 @@ y[n] = h0·x[n] + h1·x[n-1] + … + hN·x[n-N]
 ```
 ---
 <p align="center">
-  <img src="img/filter.png" alt="Conceptual functionality of the convolution represented like this" width="650"/>
+  <img src="..img/filter.png" alt="Conceptual functionality of the convolution represented like this" width="650"/>
 </p>
 *Pic taken from https://sites.google.com/view/lab-instructions-aes/lab3-adda-conversion-and-audio-processing
 
