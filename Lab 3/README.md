@@ -70,47 +70,70 @@ Use the **Global Timer** to measure the sampling period:
 ```c
 u32 t = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
 ```
+Given that:
 
-Compute actual sampling frequency:
+CPU clock ≈ 667 MHz
 
+Global Timer clock = CPU / 2 ≈ 333 MHz
+
+The sampling frequency is:
 ```
-Fs = (timer_clock / Δticks)
+Δticks = t[n+1] − t[n]
+Fs     = GLOBAL_TMR_FREQ / Δticks   ≈ 333e6 / Δticks
 ```
 
 Important:
 
-* UART printing must not disturb the timing measurement
-* Remember that the Global Timer runs at **half the ARM clock** (≈333 MHz)
+* UART printing must be done only after capturing t0 and t1, so that serial I/O does not perturb the measurement.
+* The Global Timer runs at **half the ARM clock** (≈333 MHz)
+* The Global Timer by writing to the CONTROL register (e.g. 0x03 for enable + auto-increment).
 
 ---
 
 # **Step 2 – FIR Audio Filtering**
+Extend the loopback to apply a software FIR filter in real time.
 
 Implement a **software FIR filter**:
 
 ```
 y[n] = h0·x[n] + h1·x[n-1] + … + hN·x[n-N]
 ```
+---
+<p align="center">
+  <img src="img/filter.png" alt="Conceptual functionality of the convolution represented like this" width="650"/>
+</p>
+*Pic taken from https://sites.google.com/view/lab-instructions-aes/lab3-adda-conversion-and-audio-processing
 
+---
 ### Requirements:
 
 * Maintain a sliding buffer of past samples
 * Use a **parameterizable number of taps**
-* Coefficients provided in `main.c` (LP and HP examples)
-* Create a FIR function:
+* Use FIR coefficients provided in main_step2_fir.c:
+  * Base Low-Pass (LP) and High-Pass (HP) kernels
+  * More aggressive LP / HP versions with more taps
+* Implement a FIR function:
 
 ```c
-float fir_filter(float sample, float *h, float *buffer, int N);
+int FIR_filter(int *buffer, float *h, int N);
 ```
+where:
+* buffer[0] holds the newest sample x[n]
+* buffer[k] holds x[n−k]
+* h[0..N−1] are the FIR coefficients
 
+**Per-Channel Processing**
 * Apply filtering **per-channel** (Left and Right independently)
+* Two sliding windows are maintained: bufferL[] and bufferR[].
+
+**Filter Selection via Switches**
 * Use switches to select:
 
-- **SW0 = enable Low-Pass filter (LP)**
-- **SW1 = enable High-Pass filter (HP)**
-- **SW2 = enable Low-Pass (aggressive) filter**
-- **SW3 = enable High-Pass (aggressive) filter**
-- **If none active → raw passthrough**
+- *SW0 = enable Low-Pass filter (LP)*
+- *SW1 = enable High-Pass filter (HP)*
+- *SW2 = enable Low-Pass (aggressive) filter*
+- *SW3 = enable High-Pass (aggressive) filter*
+- *If none active → raw passthrough*
 
 
 Only one filter should be active at a time; priority is evaluated in this order:
@@ -120,6 +143,12 @@ Only one filter should be active at a time; priority is evaluated in this order:
 You may use online tone generators such as:
 [https://www.szynalski.com/tone-generator](https://www.szynalski.com/tone-generator)
 
+Typical tests:
+* 1 kHz sine for LP/HP behavior
+* Swept tones / noise for qualitative spectrum shaping
+
+You can also design additional FIR kernels using online tools, e.g.:
+* http://t-filter.engineerjs.com/
 ---
 
 # **Step 3 – Filtering Execution Time Measurement**
@@ -132,28 +161,37 @@ Use the Global Timer to measure:
 ```
 budget_cycles = timer_frequency / Fs
 ```
+For Fs ≈ 48 kHz and GLOBAL_TMR_FREQ ≈ 333 MHz:
+```
+budget_cycles ≈ 333e6 / 48e3 ≈ 6937 cycles per sample
+```
 
-3. **Maximum number of FIR taps sustainable in real-time**
+3. **Cycles per tap:**
+```
+cycles_per_tap = cycles_per_call / N
 
-Stop filtering when the total cycles exceed `budget_cycles`.
+```
+4**Maximum feasible taps in real time:**
+```
+max_taps ≈ budget_cycles / cycles_per_tap
 
+```
 Example procedure:
 
 ```c
-u32 t0 = Xil_In32(GLOBAL_TMR_BASEADDR + 4);
-fir_filter(...);
-u32 t1 = Xil_In32(GLOBAL_TMR_BASEADDR + 4);
-cycles = t1 - t0;
+u32 t0 = Xil_In32(GLOBAL_TMR_BASEADDR);
+for (int i = 0; i < iterations; i++) {
+    dummy = FIR_filter(buffer, h, N);
+}
+u32 t1   = Xil_In32(GLOBAL_TMR_BASEADDR);
+u32 dt   = t1 - t0;
+float cycles_per_call = dt / (float)iterations;
 ```
+Where dummy is a volatile variable to prevent the compiler from optimizing away the FIR call.
 
-You must:
+**Cache ON vs Cache OFF**
 
-* Report FIR execution time
-* Compute **cycles per tap**
-* Compute **max feasible taps** without dropping samples
-* Compare **cache ON vs cache OFF**
-
-Disable caches using:
+Repeat the timing experiment with:
 
 ```c
 Xil_ICacheDisable();
@@ -168,17 +206,17 @@ Xil_DCacheDisable();
 Lab3_Audio/
 │
 ├── AES/                                      → Full Xilinx SDK/Vitis workspace
-│   ├── lab3_step1_loopback/                  → Step 1: raw audio loopback
+│   ├── lab3_step1_loopback/                  → Step 1: raw audio loopback + Fs
 │   ├── lab3_step2_fir/                       → Step 2: FIR filter implementation
 │   ├── lab3_step3_timing/                    → Step 3: FIR timing + tap analysis
 │   ├── *_bsp/                                → Board Support Package
 │   └── design_1_wrapper_hw_platform_0/       → Exported hardware (.hdf/.xsa)
 │
-├── main_step1_loopback.c                     → Minimal loopback
-├── main_step2_fir.c                          → FIR filtering
-├── main_step3_timing.c                       → FIR timing + max tap detection
+├── main_step1_loopback.c                     → Loopback + Global Timer Fs
+├── main_step2_fir.c                          → Real-time FIR filtering (LP/HP)
+├── main_step3_timing.c                       → FIR timing + cache ON/OFF study
 │
-└── README.md                                 → Lab documentation
+└── README.md                                 → Lab documentation (this file)
 ```
 
 Each folder contains:
