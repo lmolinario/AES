@@ -361,19 +361,19 @@ int main()
     int j = 0;            // loop counter for delayed measurement
 
 
-/* --------------------------------------------------------------------------
- *  STEP 1 – SIMPLE LOOPBACK TEST (IN → OUT)
- *
- *  As required by the lab:
- *      - acquire one stereo sample (L, R)
- *      - immediately forward it to the TX FIFO
- *
- *  This verifies the correct end-to-end behavior of the audio chain:
- *      ADC → I²S RX → CPU → I²S TX → DAC
- *
- *  This is the minimum working configuration needed to validate
- *  proper audio hardware operation.
- * -------------------------------------------------------------------------- */
+    /* --------------------------------------------------------------------------
+     *  STEP 1 – SIMPLE LOOPBACK TEST (IN → OUT)
+     *
+     *  As required by the lab:
+     *      - acquire one stereo sample (L, R)
+     *      - immediately forward it to the TX FIFO
+     *
+     *  This verifies the correct end-to-end behavior of the audio chain:
+     *      ADC → I²S RX → CPU → I²S TX → DAC
+     *
+     *  This is the minimum working configuration needed to validate
+     *  proper audio hardware operation.
+     * -------------------------------------------------------------------------- */
 
     while (1)
     {
