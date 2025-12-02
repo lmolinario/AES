@@ -72,7 +72,7 @@ AES Labs/
 │   ├── main_XXXX.c
 │   ├── main_XXXX.c
 │   ├── AES/                     → Full Xilinx SDK 2019.1 workspace
-│   └── README.md                → Lab 3 documentation
+│   └── README.md                → Lab 4 documentation
 │
 └── README.md                    → Root documentation (this file)
 ```
