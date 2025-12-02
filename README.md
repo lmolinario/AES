@@ -30,11 +30,12 @@ Each lab focuses on hands-on embedded programming for the **MicroBlaze soft-core
 
 ## Labs Summary
 
-| Lab        | Title                    | Description                                                                                                                                                                                                                                                                      |
-|------------| ------------------------ |----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Lab 1**  | **Polling & Interrupts** | (a) `a_lab1_polling_basic.c` – polling version (read switches and mirror on LEDs) <br> (b) `b_lab1_interrupt_part1.c` – dual interrupt (SW + BTN) via AXI Interrupt Controller <br> (c) `c_lab1_interrupt_part2.c` – extended ISR: add Student ID digit (9) + invert pattern     |
-| **Lab 2**  | **UART Microserver**     | (1) `main_negative.c` – receive PPM P6 image over UART → compute negative → send back processed image <br> (2) `main_hist_stretch.c` – linear histogram stretching with arbitrary image size <br> (3) `main_hist_equalization.c` – optional bonus: global histogram equalization |
-| **Lab 3** | **AD/DA conversion and audio processing**     |                                                                                                                                                                                                                                                                                  |
+| Lab       | Title                                     | Description                                                                                                                                                                                                                                                                      |
+|-----------|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Lab 1** | **Polling & Interrupts**                  | (a) `a_lab1_polling_basic.c` – polling version (read switches and mirror on LEDs) <br> (b) `b_lab1_interrupt_part1.c` – dual interrupt (SW + BTN) via AXI Interrupt Controller <br> (c) `c_lab1_interrupt_part2.c` – extended ISR: add Student ID digit (9) + invert pattern     |
+| **Lab 2** | **The PS - UART Microserver**             | (1) `main_negative.c` – receive PPM P6 image over UART → compute negative → send back processed image <br> (2) `main_hist_stretch.c` – linear histogram stretching with arbitrary image size <br> (3) `main_hist_equalization.c` – optional bonus: global histogram equalization |
+| **Lab 3** | **AD/DA conversion and audio processing** |                                                                                                                                                                                                                                                                                  |
+| **Lab 4** | **Parallel Processing**                   |                                                                                                                                                                                                                                                                                  |
 
 ---
 
@@ -60,6 +61,13 @@ AES Labs/
 │   └── README.md                → Lab 2 documentation
 │
 ├── Lab 3/
+│   ├── main_XXXX.c
+│   ├── main_XXXX.c
+│   ├── main_XXXX.c
+│   ├── AES/                     → Full Xilinx SDK 2019.1 workspace
+│   └── README.md                → Lab 3 documentation
+│
+├── Lab 4/
 │   ├── main_XXXX.c
 │   ├── main_XXXX.c
 │   ├── main_XXXX.c
