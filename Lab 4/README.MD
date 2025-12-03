@@ -207,21 +207,7 @@ Measure the total time required for both cores to compute the full vector.
 
 ---
 
-# **Step 7 – Experiment: Vary the Array Size**
 
-Modify:
-
-```
-#define ARRAY_SIZE ...
-```
-
-Repeat timing experiments for different vector lengths to observe:
-
-* Scaling behavior
-* Parallel speed-up
-* Effects of cache ON/OFF (optional)
-
----
 
 ## **Project Structure**
 
