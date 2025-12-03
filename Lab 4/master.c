@@ -1,83 +1,92 @@
-/***************************************************************
- *  Lab 4 – Parallel Processing (Master – Core 0)
- *  Author: Lello Molinario
- *  Advanced Embedded Systems – University of Cagliari
- *
- *  Description
- *  ------------------------------------------------------------
- *  Core 0 initializes the shared vectors A and B, signals Core 1
- *  to start, computes the first half of vector C, and waits for
- *  Core 1 to finish the second half. Execution time is measured
- *  using the Global Timer. Memory is shared via a fixed DDR base
- *  address defined in shared.h.
- ***************************************************************/
-
 #include "xparameters.h"
 #include "xil_cache.h"
 #include "xil_printf.h"
-#include "xil_io.h"
+#include "xtime_l.h"
 #include "shared.h"
+#include "xil_io.h"
 
-u32 t_start, t_end;
+u32  t_start, t_end;
 
 int main(void)
 {
+    // Disable caches to avoid coherency issues for this simple exercise.
+ Xil_ICacheDisable();
+    Xil_DCacheDisable();
     int i;
 
-    /* Disable caches (no coherency management in this lab) */
-    Xil_ICacheDisable();
-    Xil_DCacheDisable();
 
-    /* Wait for start button (GPIO2) */
-    while (Xil_In32(XPAR_AXI_GPIO_2_BASEADDR) == 0);
 
-    xil_printf("Core 0 (Master): Starting parallel vector addition...\r\n");
+    while (Xil_In32(XPAR_AXI_GPIO_2_BASEADDR)==0);//wait for the start on button
 
-    /* Initialize data in shared memory */
-    for (i = 0; i < ARRAY_SIZE; i++) {
+    xil_printf("Core 0: Parallel vector add demo (fixed shared base)\r\n");
+
+    // Initialize data in shared memory
+    for (i = 0; i < ARRAY_SIZE; ++i) {
         SHARED->A[i] = i;
         SHARED->B[i] = 2 * i;
     }
 
-    /* Init sync flags */
-    SHARED->start = 0;
+    // Init flags
     SHARED->done0 = 0;
     SHARED->done1 = 0;
+    SHARED->start = 0;
 
-    xil_printf("Core 0: Data initialized. Signaling Core 1...\r\n");
 
-    /* Start timing */
-    t_start = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+    xil_printf("Core 0: Data initialized, signaling core 1 to start...\r\n");
 
-    /* Signal Core 1 */
+    t_start=Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+
+    // Signal core 1 to start
     SHARED->start = 1;
 
-    /* Core 0 computes first half */
-    for (i = 0; i < ARRAY_SIZE / 2; i++) {
+
+
+
+
+    // Core 0 processes first half
+    for (i = 0; i < ARRAY_SIZE /2 ; ++i) {
         SHARED->C[i] = SHARED->A[i] + SHARED->B[i];
     }
     SHARED->done0 = 1;
 
-    /* Wait for Worker (Core 1) */
-    while (SHARED->done1 == 0);
+    // Wait until core 1 finishes
+    while (SHARED->done1 == 0) {
+        // busy-wait
+    }
 
-    /* End timing */
-    t_end = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+    t_end=Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+    xil_printf("Core 0: Finished first half, waiting for core 1...\r\n");
 
-    /* Validate result */
+    // Check correctness
     int errors = 0;
-    for (i = 0; i < ARRAY_SIZE; i++) {
+    for (i = 0; i < ARRAY_SIZE; ++i) {
         u32 expected = SHARED->A[i] + SHARED->B[i];
         if (SHARED->C[i] != expected) {
             errors++;
+            if (errors < 10) {
+                xil_printf("Mismatch at %d: got %lu, expected %lu\r\n",
+                           i,
+                           (unsigned long)SHARED->C[i],
+                           (unsigned long)expected);
+                int idx = i;
+                xil_printf("Debug at %d: A=%lu, B=%lu, C=%lu, expected=%lu\r\n",
+                           idx,
+                           (unsigned long)SHARED->A[idx],
+                           (unsigned long)SHARED->B[idx],
+                           (unsigned long)SHARED->C[idx],
+                           (unsigned long)(SHARED->A[idx] + SHARED->B[idx]));
+            }
         }
     }
 
-    xil_printf("Core 0: DONE. Errors=%d  Duration=%u ticks\r\n",
-               errors,
-               (unsigned)(t_end - t_start));
 
-    while (1);   /* Idle */
+    xil_printf("Core 0: FATTO. Errors = %d, start = %x, end = %x, duration = %x\r\n",
+               errors, t_start, t_end, t_end - t_start );
+
+    while (1) {
+        xil_printf("PING master\r\n");
+        for (volatile int d = 0; d < 1000000; d++);
+    }
 
     return 0;
 }

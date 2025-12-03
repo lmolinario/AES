@@ -136,6 +136,19 @@ Edit `lscript.ld` for **both projects**:
 
 This guarantees that memory used for communication is not overwritten by either core.
 
+
+<p align="center">
+  <img src="../img/master_lscript.png" alt="Conceptual functionality of convolution" width="650"/>
+</p>
+<p align="center"><i>Master’s lscript.ld — all sections in ddrCore0, no overlap with shared DDR</i></p>
+
+
+
+<p align="center">
+  <img src="../img/worker_lscript.png" alt="Conceptual functionality of convolution" width="650"/>
+</p>
+<p align="center"><i>Worker’s lscript.ld — all sections in ddrCore1, no overlap with shared DDR</i></p>
+
 ---
 
 # **Step 5 – System Debugger Multi-Core Configuration**
@@ -261,14 +274,14 @@ Lab4_ParallelProcessing/
 
 ## **Output Example**
 
-```
-Core 0: Parallel vector add demo
-Core 0: Data initialized, signaling core 1...
-Core 0: Finished first half, waiting for core 1...
-Core 0: DONE. Errors=0, start=0012A400, end=0012E9F0, duration=000045F0
-```
+---
+<p align="center">
+  <img src="../img/lab4output.png" alt="Conceptual functionality of convolution" width="650"/>
+</p>
+<p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
 
 ---
+
 
 ## **Notes**
 

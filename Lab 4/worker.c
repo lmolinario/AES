@@ -1,50 +1,44 @@
-/***************************************************************
- *  Lab 4 – Parallel Processing (Worker – Core 1)
- *  Author: Lello Molinario
- *  Advanced Embedded Systems – University of Cagliari
- *
- *  Description
- *  ------------------------------------------------------------
- *  Core 1 waits for the start signal from Core 0, then computes
- *  the second half of vector C using the shared memory region.
- *  When completed, it sets done1=1 and enters an idle loop.
- ***************************************************************/
-
 #include "xparameters.h"
 #include "xil_cache.h"
 #include "xil_printf.h"
-#include "xil_io.h"
 #include "shared.h"
+#include "xil_io.h"
+
 
 int main(void)
 {
     int i;
 
-    /* Disable caches to avoid coherency issues */
+    // Disable caches for this exercise (same reason as core 0).
     Xil_ICacheDisable();
     Xil_DCacheDisable();
 
-    xil_printf("Core 1 (Worker): Waiting for start...\r\n");
+    xil_printf("Core 1: Waiting for start signal...\r\n");
 
-    /* Optional: wait for same button as Master */
-    while (Xil_In32(XPAR_AXI_GPIO_2_BASEADDR) == 0);
+    while (Xil_In32(XPAR_AXI_GPIO_2_BASEADDR)==0);//wait for the start on button
 
-    /* Wait until Master signals 'start' */
-    while (SHARED->start == 0);
+    // Wait until core 0 sets start flag
+    while (SHARED->start == 0) {
+        // busy-wait
+    }
 
-    xil_printf("Core 1: Starting computation of second half.\r\n");
+    xil_printf("Core 1: Starting second half computation\r\n");
 
-    /* Compute second half of vector C */
-    for (i = ARRAY_SIZE / 2; i < ARRAY_SIZE; i++) {
+    // Process second half of the array
+    for (i = ARRAY_SIZE / 2; i < ARRAY_SIZE; ++i) {
         SHARED->C[i] = SHARED->A[i] + SHARED->B[i];
     }
 
-    /* Signal completion */
+
     SHARED->done1 = 1;
 
     xil_printf("Core 1: Done.\r\n");
 
-    while (1);   /* Idle */
+    while (1) {
+        xil_printf("PING worker\r\n");
+        for (volatile int d = 0; d < 1000000; d++);
+    }
+
 
     return 0;
 }

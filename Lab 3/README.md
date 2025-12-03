@@ -1,202 +1,55 @@
 # **Lab 3 – AD/DA Conversion and Audio Processing**
 
----
-
-## **Overview**
-
-This assignment is related to **Lab 3 – Audio Acquisition, Processing, and Playback** on the Zybo Z7 board.
-
-The goal is to implement a **real-time DSP application** that:
-
-1. **Acquires audio** from the LINE IN jack using the onboard **SSM2603** codec
-2. Performs **Analog → Digital** conversion (ADC)
-3. Makes samples available to the **ARM Processing System (PS)** through I2S
-4. Applies a **software FIR filter** to the audio stream
-5. Sends processed samples back to the codec for **Digital → Analog** conversion (DAC)
-6. Plays the filtered output through the **HPH OUT** jack
-
-The audio codec is accessible via:
-
-* **I2C** (control interface for configuration)
-* **I2S** (audio data interface via AXI I2S peripheral)
+This repository contains the full implementation of **Lab 3** for the
+Advanced Embedded Systems course (University of Cagliari).
+The project acquires audio from the **SSM2603 codec** via I2S, optionally processes the audio stream using a software FIR filter, and transmits the resulting audio back to the DAC for playback on the Zybo Z7 board.
 
 ---
 
-## **Hardware System**
-
-The Vivado hardware platform provides:
-
-| Peripheral         | Function                                               |
-| ------------------ | ------------------------------------------------------ |
-| `ps7_uart_1`       | UART console output                                    |
-| `ps7_global_timer` | High-resolution timing (used for performance analysis) |
-| `ps7_ddr`          | DDR memory interface                                   |
-| `axi_gpio`         | Switches, LEDs, Buttons                                |
-| `axi_i2s_adi_1`    | I2S controller for SSM2603 codec                       |
-| `axi_fifo_mm_s`    | FIFO for RX/TX audio samples                           |
-
-The **SSM2603** handles audio ADC/DAC; its configuration registers are written via **XIicPs**.
-
-
----
 <p align="center">
   <img src="../img/Zybo_ADDA.jpg" alt="Zybo Z7 board used in the labs" width="650"/>
 </p>
-*Photo taken during AES Lab*
+<p align="center"><i>Photo taken during AES Lab</i></p>
 
 ---
 
-## **Assignment Structure**
+## **Instructions**
 
-You must produce **three progressively more advanced implementations**:
+This assignment is related to **Lab 3 on AD/DA conversion and real-time DSP**.
+Students must prepare the following implementations:
 
----
+* **Step 1 – Loopback** (raw passthrough)
+* **Step 2 – FIR Filtering** (real-time convolution)
+* **Step 3 – FIR Timing Analysis** (Global Timer)
 
-# **Step 1 – Loopback (IN → OUT)**
+The system must:
 
-Implement and test the **basic audio loopback**:
+1. Acquire audio samples from the **I2S RX FIFO**
+2. Process samples according to the selected version:
 
-* Acquire samples from I2S RX FIFO
-* Immediately transmit them to I2S TX FIFO
-* No processing
-* Codec initialized via I2C
-* I2S configured for 48 kHz, 24-bit frame format
-* Blocking read/write via FIFO
-
-### **Additional Requirement**
-
-Use the **Global Timer** to measure the sampling period:
-
-```c
-u32 t = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
-```
-Given that:
-
-CPU clock ≈ 667 MHz
-
-Global Timer clock = CPU / 2 ≈ 333 MHz
-
-The sampling frequency is:
-```
-Δticks = t[n+1] − t[n]
-Fs     = GLOBAL_TMR_FREQ / Δticks   ≈ 333e6 / Δticks
-```
-
-Important:
-
-* UART printing must be done only after capturing t0 and t1, so that serial I/O does not perturb the measurement.
-* The Global Timer runs at **half the ARM clock** (≈333 MHz)
-* The Global Timer by writing to the CONTROL register (e.g. 0x03 for enable + auto-increment).
+   * **Loopback**
+   * **FIR filtering** (LPF / HPF / aggressive LPF / aggressive HPF)
+3. Transmit samples to the **I2S TX FIFO**
+4. Playback via **SSM2603 DAC**
 
 ---
 
-# **Step 2 – FIR Audio Filtering**
-Extend the loopback to apply a software FIR filter in real time.
-
-Implement a **software FIR filter**:
-
-```
-y[n] = h0·x[n] + h1·x[n-1] + … + hN·x[n-N]
-```
----
-<p align="center">
-  <img src="../img/filter.png" alt="Conceptual functionality of the convolution represented like this" width="650"/>
-</p>
-*Pic taken from https://sites.google.com/view/lab-instructions-aes/lab3-adda-conversion-and-audio-processing
+## **Supported Audio Format**
+I2C (XIicPs) is used to configure the SSM2603 codec.
 
 ---
-### Requirements:
 
-* Maintain a sliding buffer of past samples
-* Use a **parameterizable number of taps**
-* Use FIR coefficients provided in main_step2_fir.c:
-  * Base Low-Pass (LP) and High-Pass (HP) kernels
-  * More aggressive LP / HP versions with more taps
-* Implement a FIR function:
+## **Hardware Platform**
 
-```c
-int FIR_filter(int *buffer, float *h, int N);
-```
-where:
-* buffer[0] holds the newest sample x[n]
-* buffer[k] holds x[n−k]
-* h[0..N−1] are the FIR coefficients
+The Vivado design includes:
 
-**Per-Channel Processing**
-* Apply filtering **per-channel** (Left and Right independently)
-* Two sliding windows are maintained: bufferL[] and bufferR[].
-
-**Filter Selection via Switches**
-* Use switches to select:
-
-- *SW0 = enable Low-Pass filter (LP)*
-- *SW1 = enable High-Pass filter (HP)*
-- *SW2 = enable Low-Pass (aggressive) filter*
-- *SW3 = enable High-Pass (aggressive) filter*
-- *If none active → raw passthrough*
-
-
-Only one filter should be active at a time; priority is evaluated in this order:
-`SW0 → SW1 → SW2 → SW3`.
-### Testing:
-
-You may use online tone generators such as:
-[https://www.szynalski.com/tone-generator](https://www.szynalski.com/tone-generator)
-
-Typical tests:
-* 1 kHz sine for LP/HP behavior
-* Swept tones / noise for qualitative spectrum shaping
-
-You can also design additional FIR kernels using online tools, e.g.:
-* http://t-filter.engineerjs.com/
----
-
-# **Step 3 – Filtering Execution Time Measurement**
-
-Use the Global Timer to measure:
-
-1. **Cycles required by the FIR function**
-2. **Cycles available per sample**:
-
-```
-budget_cycles = timer_frequency / Fs
-```
-For Fs ≈ 48 kHz and GLOBAL_TMR_FREQ ≈ 333 MHz:
-```
-budget_cycles ≈ 333e6 / 48e3 ≈ 6937 cycles per sample
-```
-
-3. **Cycles per tap:**
-```
-cycles_per_tap = cycles_per_call / N
-
-```
-4**Maximum feasible taps in real time:**
-```
-max_taps ≈ budget_cycles / cycles_per_tap
-
-```
-Example procedure:
-
-```c
-u32 t0 = Xil_In32(GLOBAL_TMR_BASEADDR);
-for (int i = 0; i < iterations; i++) {
-    dummy = FIR_filter(buffer, h, N);
-}
-u32 t1   = Xil_In32(GLOBAL_TMR_BASEADDR);
-u32 dt   = t1 - t0;
-float cycles_per_call = dt / (float)iterations;
-```
-Where dummy is a volatile variable to prevent the compiler from optimizing away the FIR call.
-
-**Cache ON vs Cache OFF**
-
-Repeat the timing experiment with:
-
-```c
-Xil_ICacheDisable();
-Xil_DCacheDisable();
-```
+| Peripheral         | Function                                 |
+| ------------------ | ---------------------------------------- |
+| `ps7_uart_1`       | UART console output                      |
+| `ps7_global_timer` | High-resolution performance measurements |
+| `axi_gpio`         | Switches / LEDs / Buttons                |
+| `axi_i2s_adi_1`    | I2S controller for SSM2603               |
+| `axi_fifo_mm_s`    | RX/TX FIFO buffering for audio frames    |
 
 ---
 
@@ -205,81 +58,126 @@ Xil_DCacheDisable();
 ```
 Lab3_Audio/
 │
-├── AES/                                      → Full Xilinx SDK/Vitis workspace
-│   ├── lab3_step1_loopback/                  → Step 1: raw audio loopback + Fs
-│   ├── lab3_step2_fir/                       → Step 2: FIR filter implementation
-│   ├── lab3_step3_timing/                    → Step 3: FIR timing + tap analysis
-│   ├── *_bsp/                                → Board Support Package
-│   └── design_1_wrapper_hw_platform_0/       → Exported hardware (.hdf/.xsa)
+├── main_step1_loopback.c          → Step 1: audio loopback
+├── main_step2_fir.c               → Step 2: real-time FIR filtering
+├── main_step3_timing.c            → Step 3: timing and cycles/tap analysis
 │
-├── main_step1_loopback.c                     → Loopback + Global Timer Fs
-├── main_step2_fir.c                          → Real-time FIR filtering (LP/HP)
-├── main_step3_timing.c                       → FIR timing + cache ON/OFF study
+├── AES/                           → Full Xilinx SDK/Vitis workspace
+│   ├── lab3_step1_loopback/       → Step 1 SDK project
+│   ├── lab3_step2_fir/            → Step 2 SDK project
+│   ├── lab3_step3_timing/         → Step 3 SDK project
+│   ├── *_bsp/                     → Board Support Packages
+│   └── design_1_wrapper_hw_0/     → Hardware platform (.hdf/.xsa)
 │
-└── README.md                                 → Lab documentation (this file)
+└── README.md
 ```
 
-Each folder contains:
+**Notes:**
 
-* Clean and documented C source
-* FIFO-based I2S read/write
-* Codec initialization via I2C
-* Real-time audio processing
+* Folder `AES/` contains the **complete workspace** for compilation and testing.
+* The `.c` files in the root are **clean standalone versions** for review and grading.
+* All implementations share the same codec initialization and I2S RX/TX logic.
 
 ---
 
-## **Implementation Summary**
+## **Implementations Summary**
 
-### 🔹 **Step 1: Loopback**
+### 🔹 **(1) Step 1 – Loopback (`main_step1_loopback.c`)**
 
-* Configure SSM2603 via I2C
-* Enable I2S RX/TX
-* Read left/right samples
-* Write back same samples
-* Measure sampling frequency
+Implements a raw passthrough of audio samples:
 
-### 🔹 **Step 2: FIR Filtering**
+1. Initialize the codec (I2C)
+2. Configure I2S @ 48 kHz
+3. Read Left/Right samples from RX FIFO
+4. Immediately write them to TX FIFO (no processing)
 
-* Convolution via sliding window
-* Adjustable number of taps
-* LP / HP filters provided
-* Switch-controlled processing
+### **Sampling Frequency Estimation**
 
-### 🔹 **Step 3: FIR Timing**
+Using the Global Timer:
 
-Measured:
+```c
+u32 t = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+```
 
-* FIR cycles per sample
+The sampling frequency is computed as:
+
+```
+Δticks = t[n+1] − t[n]
+Fs     = 333e6 / Δticks
+```
+
+---
+
+### 🔹 **(2) Step 2 – FIR Audio Filtering (`main_step2_fir.c`)**
+
+Real-time software FIR filtering:
+
+```
+y[n] = h0·x[n] + h1·x[n−1] + … + hN·x[n−N]
+```
+
+<p align="center">
+  <img src="../img/filter.png" alt="Conceptual functionality of convolution" width="650"/>
+</p>
+<p align="center"><i>Conceptual representation of FIR convolution</i></p>
+
+---
+
+**Features:**
+
+* Sliding buffers for past samples (`bufferL[]`, `bufferR[]`)
+* Parameterizable number of taps
+* Four selectable filters:
+
+  * LPF
+  * HPF
+  * Aggressive LPF
+  * Aggressive HPF
+
+A single filter is selected via GPIO switches.
+
+**Prototype:**
+
+```c
+int FIR_filter(int *buffer, float *h, int N);
+```
+
+---
+
+### 🔹 **(3) Step 3 – FIR Timing (`main_step3_timing.c`)**
+
+Analyzes computational cost using the Global Timer:
+
+* Cycles per FIR function call
 * Cycles per tap
-* Maximum sustainable taps
-* Cache ON vs cache OFF
+* Maximum number of taps sustainable at 48 kHz
+* Comparison **cache ON vs cache OFF**
 
-Example output:
+Example:
 
 ```
-N=20 | FIR = 860 cycles | 43 cyc/tap | MAX taps ≈ 160
+N = 20 | FIR = 860 cycles | 43 cycles/tap | Max taps ≈ 160
 ```
 
 ---
 
-## **Audio Test Workflow**
+## **Example Workflow**
 
-1. Connect **LINE IN** to a tone generator
+1. Connect signal to **LINE IN**
 2. Connect headphones to **HPH OUT**
-3. Run Step 1 → verify loopback
-4. Run Step 2 → enable FIR via switch
-5. Switch between clean / filtered
-6. Run Step 3 → observe timing output
+3. Load Step 1 → verify passthrough
+4. Load Step 2 → enable filters via switches
+5. Load Step 3 → read performance results via UART
 
 ---
 
 ## **Notes**
 
-* I2S interface is blocking for simplicity
-* FIR is pure software implementation
-* Coefficients must match the number of taps
-* Audio buffers must be reset at startup
-* Filtering must not exceed sample period
+* I2S RX/TX uses **blocking operations** for deterministic real-time behavior
+* FIR operates **in-place** for efficiency
+* Filter coefficients must match selected tap length
+* Ensure buffers are reset at startup
+* UART debug prints must not occur inside timing-critical loops
 
 ---
 
