@@ -58,6 +58,9 @@ Fully Connected (64 → 32)
 ReLU
 Fully Connected (32 → 10)
 ```
+<p align="center">
+  <img src="img/onnx_model.png" alt="Onnx Model" width="120"/>
+</p>
 
 Weights and biases are provided in:
 
@@ -276,15 +279,6 @@ Waiting for the image…
 RESULT: 2
 ```
 
----
-
-## **Notes**
-
-* Add library **-lm** to linker (required for `math.h`)
-* Increase stack size in linker script if intermediate buffers overflow
-* RealTerm must send raw binary, *not* ASCII
-* UART delays do not affect DNN timing measurements
-* All code must be clean, documented, and organized according to AES grading guidelines
 
 ---
 
