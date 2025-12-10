@@ -148,17 +148,17 @@ int main(){
   //read weights and bias
 
   // ================================
-  // STEP 2 – Microserver UART
+  // STEP 2 – 3 - Ciclo continuo di classificazione via UART
   // ================================
+
   while (1) {
-      xil_printf("Waiting for the image...\n");
+      xil_printf("\nWaiting for the image...\r\n");
 
-      // 1) Ricevi immagine da PC via UART
+      // (1) Ricezione immagine da UART
       receive_image(image);
-      xil_printf("Image received.\n");
+      xil_printf("Image received.\r\n");
 
-      // 2) Esegui la DNN (stessa pipeline dello step 1)
-
+      // (2) Esecuzione DNN
       FC_forward(image, output_gemm0, 784, 64, gemm0_weights, gemm0_bias, 8);
       relu_forward(output_gemm0, input_gemm1, 64);
 
@@ -167,13 +167,12 @@ int main(){
 
       FC_forward(input_gemm2, output_gemm2, 32, 10, gemm2_weights, gemm2_bias, 8);
 
+      // (3) Classificazione finale
       int predicted = resultsProcessing(output_gemm2, 10);
 
-      // 3) Rispondi al PC col digit riconosciuto
-      xil_printf("PRED=%d\n", predicted);
-      fflush(stdout);
-
+      xil_printf("RESULT=%d\r\n", predicted);
   }
+
 
     cleanup_platform();
     return 0;
