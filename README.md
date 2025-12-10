@@ -36,6 +36,7 @@ Each lab focuses on hands-on embedded programming for the **MicroBlaze soft-core
 | **Lab 2** | **The PS - UART Microserver**             | (1) `main_negative.c` – receive PPM P6 image over UART → compute negative → send back processed image <br> (2) `main_hist_stretch.c` – linear histogram stretching with arbitrary image size <br> (3) `main_hist_equalization.c` – optional bonus: global histogram equalization |
 | **Lab 3** | **AD/DA conversion and audio processing** |                                                                                                                                                                                                                                                                                  |
 | **Lab 4** | **Parallel Processing**                   |                                                                                                                                                                                                                                                                                  |
+| **Lab 5** | **DNN on MNIST**                   |                                                                                                                                                                                                                                                                                  |
 
 ---
 
@@ -73,6 +74,13 @@ AES Labs/
 │   ├── main_XXXX.c
 │   ├── AES/                     → Full Xilinx SDK 2019.1 workspace
 │   └── README.md                → Lab 4 documentation
+│
+├── Lab 5/
+│   ├── main_XXXX.c
+│   ├── main_XXXX.c
+│   ├── main_XXXX.c
+│   ├── AES/                     → Full Xilinx SDK 2019.1 workspace
+│   └── README.md                → Lab 5 documentation
 │
 └── README.md                    → Root documentation (this file)
 ```
