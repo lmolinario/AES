@@ -148,29 +148,102 @@ int main(){
   //read weights and bias
 
   // ================================
-  // STEP 2 – 3 - Ciclo continuo di classificazione via UART
+  // STEP 2 – 3 – 4
+  // Ciclo continuo con misura dei tempi
   // ================================
-
   while (1) {
+
       xil_printf("\nWaiting for the image...\r\n");
 
-      // (1) Ricezione immagine da UART
-      receive_image(image);
-      xil_printf("Image received.\r\n");
+      XTime t_start_total, t_end_total;
+      XTime_GetTime(&t_start_total);
 
-      // (2) Esecuzione DNN
+      // ----------------------------
+      // (1) Tempo ricezione immagine
+      // ----------------------------
+      XTime t0, t1;
+      XTime_GetTime(&t0);
+
+      receive_image(image);
+
+      XTime_GetTime(&t1);
+      xil_printf("Time RX image     = %llu cycles\r\n", (t1 - t0));
+
+
+      // ----------------------------
+      // (2) DNN: FC0 (784 → 64)
+      // ----------------------------
+      XTime_GetTime(&t0);
+
       FC_forward(image, output_gemm0, 784, 64, gemm0_weights, gemm0_bias, 8);
+
+      XTime_GetTime(&t1);
+      xil_printf("Time FC0           = %llu cycles\r\n", (t1 - t0));
+
+
+      // ----------------------------
+      // (3) ReLU0
+      // ----------------------------
+      XTime_GetTime(&t0);
+
       relu_forward(output_gemm0, input_gemm1, 64);
 
+      XTime_GetTime(&t1);
+      xil_printf("Time ReLU0         = %llu cycles\r\n", (t1 - t0));
+
+
+      // ----------------------------
+      // (4) FC1 (64 → 32)
+      // ----------------------------
+      XTime_GetTime(&t0);
+
       FC_forward(input_gemm1, output_gemm1, 64, 32, gemm1_weights, gemm1_bias, 8);
+
+      XTime_GetTime(&t1);
+      xil_printf("Time FC1           = %llu cycles\r\n", (t1 - t0));
+
+
+      // ----------------------------
+      // (5) ReLU1
+      // ----------------------------
+      XTime_GetTime(&t0);
+
       relu_forward(output_gemm1, input_gemm2, 32);
+
+      XTime_GetTime(&t1);
+      xil_printf("Time ReLU1         = %llu cycles\r\n", (t1 - t0));
+
+
+      // ----------------------------
+      // (6) FC2 (32 → 10)
+      // ----------------------------
+      XTime_GetTime(&t0);
 
       FC_forward(input_gemm2, output_gemm2, 32, 10, gemm2_weights, gemm2_bias, 8);
 
-      // (3) Classificazione finale
+      XTime_GetTime(&t1);
+      xil_printf("Time FC2           = %llu cycles\r\n", (t1 - t0));
+
+
+      // ----------------------------
+      // (7) Classificazione finale
+      // ----------------------------
+      XTime_GetTime(&t0);
+
       int predicted = resultsProcessing(output_gemm2, 10);
 
+      XTime_GetTime(&t1);
+      xil_printf("Time classification = %llu cycles\r\n", (t1 - t0));
+
+      // ----------------------------
+      // Tempo totale iterazione
+      // ----------------------------
+      XTime_GetTime(&t_end_total);
+      xil_printf("TOTAL iteration     = %llu cycles\r\n", (t_end_total - t_start_total));
+
       xil_printf("RESULT=%d\r\n", predicted);
+
+      fflush(stdout);
   }
 
 
