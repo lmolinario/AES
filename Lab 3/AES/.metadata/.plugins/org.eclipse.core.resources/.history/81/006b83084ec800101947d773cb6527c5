@@ -1,0 +1,148 @@
+#include <stdio.h>
+#include "platform.h"
+#include "xil_printf.h"
+#include "xil_io.h"
+#include "xiicps.h"
+#include "timer_ps.h"
+
+/* I2S Registers */
+#define I2S_RESET_REG        0x00
+#define I2S_CTRL_REG         0x04
+#define I2S_CLK_CTRL_REG     0x08
+
+#define FIFO_ISR             0x00
+#define FIFO_TDFD            0x10
+#define FIFO_TLR             0x14
+#define FIFO_RDFO            0x1C
+#define FIFO_RDFD            0x20
+
+/* Codec I2C parameters */
+#define IIC_SLAVE_ADDR   0b0011010
+#define IIC_SCLK_RATE    100000
+
+/* Device IDs from Vivado */
+#define AUDIO_IIC_ID          XPAR_XIICPS_0_DEVICE_ID
+#define AUDIO_CTRL_BASEADDR   XPAR_AXI_I2S_ADI_0_S00_AXI_BASEADDR
+#define AUDIO_FIFO            XPAR_AXI_FIFO_MM_S_0_BASEADDR
+#define SCU_TIMER_ID          XPAR_SCUTIMER_DEVICE_ID
+#define GLOBAL_TMR_BASEADDR   XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
+
+XIicPs Iic;
+
+/* ------------------------------------------------------------ */
+/* Write a register inside SSM2603 via I2C */
+/* ------------------------------------------------------------ */
+int AudioRegSet(XIicPs *IicPtr, u8 reg, u16 data)
+{
+    u8 buf[2];
+    buf[0] = (reg << 1) | ((data >> 8) & 1);
+    buf[1] = data & 0xFF;
+
+    int Status = XIicPs_MasterSendPolled(IicPtr, buf, 2, IIC_SLAVE_ADDR);
+    while (XIicPs_BusIsBusy(IicPtr)) {}
+
+    return Status;
+}
+
+/* ------------------------------------------------------------ */
+/* I2S Codec + I2C Initialization */
+/* ------------------------------------------------------------ */
+int AudioInitialize()
+{
+    int Status;
+    XIicPs_Config *Cfg;
+
+    TimerInitialize(SCU_TIMER_ID);
+
+    Cfg = XIicPs_LookupConfig(AUDIO_IIC_ID);
+    XIicPs_CfgInitialize(&Iic, Cfg, Cfg->BaseAddress);
+    XIicPs_SetSClk(&Iic, IIC_SCLK_RATE);
+
+    /* Reset + Power settings (SSM2603) */
+    AudioRegSet(&Iic, 15, 0x000);
+    TimerDelay(75000);
+    AudioRegSet(&Iic, 6,  0b000110000);
+    AudioRegSet(&Iic, 0,  0b000010111);
+    AudioRegSet(&Iic, 1,  0b000010111);
+    AudioRegSet(&Iic, 2,  0b101111001);
+    AudioRegSet(&Iic, 4,  0b000010000);
+    AudioRegSet(&Iic, 5,  0b000000000);
+    AudioRegSet(&Iic, 7,  0b000001010);
+    AudioRegSet(&Iic, 8,  0b000000000);
+    TimerDelay(75000);
+    AudioRegSet(&Iic, 9,  0b000000001);
+    AudioRegSet(&Iic, 6,  0b000100000);
+
+    /* I2S clock configuration */
+    u32 div = 1 | (31 << 16);
+    Xil_Out32(AUDIO_CTRL_BASEADDR + I2S_CLK_CTRL_REG, div);
+
+    /* Reset + Enable FIFOs */
+    Xil_Out32(AUDIO_CTRL_BASEADDR + I2S_RESET_REG, 0b110);
+    Xil_Out32(AUDIO_CTRL_BASEADDR + I2S_CTRL_REG,  0b011);
+
+    return XST_SUCCESS;
+}
+
+/* ------------------------------------------------------------ */
+/* Read sample from RX FIFO */
+/* ------------------------------------------------------------ */
+u32 I2SFifoRead(u32 fifo)
+{
+    while (Xil_In32(fifo + FIFO_RDFO) == 0) {}
+    return Xil_In32(fifo + FIFO_RDFD);
+}
+
+/* ------------------------------------------------------------ */
+/* Write sample to TX FIFO */
+/* ------------------------------------------------------------ */
+void I2SFifoWrite(u32 fifo, u32 sample)
+{
+    Xil_Out32(fifo + FIFO_TDFD, sample);
+    Xil_Out32(fifo + FIFO_TLR,  4);
+    while ((Xil_In32(fifo + FIFO_ISR) & 0x08000000) == 0) {}
+    Xil_Out32(fifo + FIFO_ISR, 0x08000000);
+}
+
+/* ------------------------------------------------------------ */
+/* MAIN — Minimal Loopback (Step 1) */
+/* ------------------------------------------------------------ */
+int main()
+{
+    init_platform();
+    xil_printf("\n===== LAB 3 – STEP 1: AUDIO LOOPBACK =====\n\r");
+
+    AudioInitialize();
+
+    xil_printf("Codec initialized. Starting loopback...\n\r");
+
+    u32 prev_time = 0;
+    u32 curr_time = 0;
+    int counter = 0;
+
+    while (1)
+    {
+        /* --- Read stereo samples --- */
+        u32 sL = I2SFifoRead(AUDIO_FIFO);
+        u32 sR = I2SFifoRead(AUDIO_FIFO);
+
+        /* --- Measure sampling period every 500 samples --- */
+        if (counter == 0)
+            prev_time = Xil_In32(GLOBAL_TMR_BASEADDR + 0x4);
+
+        if (counter == 500)
+        {
+            curr_time = Xil_In32(GLOBAL_TMR_BASEADDR + 0x4);
+            xil_printf("500 samples time: %u cycles\n\r", curr_time - prev_time);
+            counter = -1;
+        }
+        counter++;
+
+        /* --- Loopback --- */
+        I2SFifoWrite(AUDIO_FIFO, sL);
+        I2SFifoWrite(AUDIO_FIFO, sR);
+    }
+
+    cleanup_platform();
+    return 0;
+}

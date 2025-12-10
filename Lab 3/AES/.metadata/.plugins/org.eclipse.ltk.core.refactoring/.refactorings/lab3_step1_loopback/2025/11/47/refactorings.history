@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;lab3_step1_loopback/src/helloworld.c&apos; to &apos;lab3_step1_loopback.c&apos;" description="Rename resource &apos;helloworld.c&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="src/helloworld.c" name="lab3_step1_loopback.c" stamp="1763889317098" updateReferences="true"/>
+</session>

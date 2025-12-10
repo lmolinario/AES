@@ -1,0 +1,142 @@
+/******************************************************************************
+ *
+ *  Lab 3 – Step 3: FIR execution time (Global Timer)
+ *
+ *  Scopo:
+ *   - misurare il tempo di esecuzione della funzione di filtro FIR
+ *   - calcolare i cicli disponibili per campione, dati Fs e clock del timer
+ *   - stimare il numero massimo di tap gestibili in real-time
+ *   - ripetere la misura con cache abilitate e disabilitate
+ *
+ ******************************************************************************/
+
+#include <stdio.h>
+#include "platform.h"
+#include "xil_printf.h"
+#include "xil_io.h"
+#include "xil_cache.h"
+#include "xparameters.h"
+
+/* ---------------- Global Timer (PS7) ---------------- */
+#define GLOBAL_TMR_BASEADDR              XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
+#define GTIMER_COUNTER_LOWER_OFFSET      0x00
+#define GTIMER_CONTROL_OFFSET            0x08
+
+/* Frequenza del Global Timer: CPU/2 = 333 MHz (su Zynq 667 MHz) */
+#define GTIMER_FREQ_HZ                   333000000.0f
+
+/* Frequenza di campionamento audio misurata in Step 1 (da aggiornare se serve) */
+#define FS_HZ                            48000.0f
+
+/* ---------------- FIR COEFFICIENTS (LP, 20 tap) ---------------- */
+/* Riutilizziamo i coefficienti LP dello step precedente            */
+
+#define N_LP 20
+
+#define coeffLP \
+    -1.692219e-02,  5.043750e-02,  3.935835e-02,  4.341238e-02,  5.137933e-02, \
+     5.982048e-02,  6.748827e-02,  7.379049e-02,  7.824605e-02,  8.052560e-02, \
+     8.052560e-02,  7.824605e-02,  7.379049e-02,  6.748827e-02,  5.982048e-02, \
+     5.137933e-02,  4.341238e-02,  3.935835e-02,  5.043750e-02, -1.6922186e-02
+
+static float LP[N_LP] = { coeffLP };
+
+/* Buffer per il segnale (sliding window) */
+static float bufferL[N_LP] = {0.0f};
+
+
+/* ------------------- FIR STEP (con sliding buffer) ------------------- */
+/*
+ * filter_step
+ *  - shifta il buffer (x[n-k])
+ *  - inserisce un nuovo campione all'inizio
+ *  - calcola la convoluzione y[n] = sum h[k] * x[n-k]
+ */
+float filter_step(float *buf, const float *h, int N, float new_sample)
+{
+    /* Shift del buffer verso destra: buf[i] = buf[i-1] */
+    for (int i = N - 1; i > 0; i--) {
+        buf[i] = buf[i - 1];
+    }
+    buf[0] = new_sample;
+
+    /* Convoluzione */
+    float acc = 0.0f;
+    for (int k = 0; k < N; k++) {
+        acc += h[k] * buf[k];
+    }
+
+    return acc;
+}
+
+
+/* ------------------- Misura tempo FIR (una configurazione) ------------------- */
+void measure_fir_with_caches(const char *label)
+{
+    const int N = N_LP;      /* numero di tap */
+    const int REPS = 1000;   /* numero di esecuzioni per mediare il tempo */
+    u32 t0, t1;
+    float y = 0.0f;
+
+    xil_printf("\n[%s] Misura FIR con N = %d tap\n\r", label, N);
+
+    /* Reset buffer a zero per coerenza */
+    for (int i = 0; i < N; i++) {
+        bufferL[i] = 0.0f;
+    }
+
+    /* Legge contatore prima della serie di chiamate */
+    t0 = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+
+    for (int i = 0; i < REPS; i++) {
+        /* Usiamo un campione fittizio (ad es. 1.0f) */
+        y = filter_step(bufferL, LP, N, 1.0f);
+        (void)y; /* evita warning se non usato */
+    }
+
+    /* Legge contatore dopo REPS chiamate */
+    t1 = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+
+    u32 delta_ticks = t1 - t0;
+    float cycles_per_call = (float)delta_ticks / (float)REPS;
+    float cycles_per_tap  = cycles_per_call / (float)N;
+
+    /* Cicli disponibili per campione dato Fs */
+    float cycles_budget_per_sample = GTIMER_FREQ_HZ / FS_HZ;
+
+    /* Numero massimo di tap gestibili in real-time */
+    float max_taps = cycles_budget_per_sample / cycles_per_tap;
+
+    xil_printf("  Δticks totali   = %u (per %d chiamate)\n\r", delta_ticks, REPS);
+    xil_printf("  cicli/chiamata  = %.2f\n\r", cycles_per_call);
+    xil_printf("  cicli/tap       = %.2f\n\r", cycles_per_tap);
+    xil_printf("  budget/sample   = %.2f cicli (Fs = %.1f Hz)\n\r",
+               cycles_budget_per_sample, FS_HZ);
+    xil_printf("  max tap real-time ≈ %d\n\r", (int)max_taps);
+}
+
+
+int main(void)
+{
+    init_platform();
+
+    xil_printf("=== LAB 3 – STEP 3: FIR execution time (Global Timer) ===\n\r");
+
+    /* Abilita il Global Timer: bit0=ENABLE, bit1=AUTO-INCREMENT */
+    Xil_Out32(GLOBAL_TMR_BASEADDR + GTIMER_CONTROL_OFFSET, 0x03);
+
+    xil_printf("\n-- Cache ENABLED --\n\r");
+    measure_fir_with_caches("Cache ON");
+
+    /* Disabilita cache I/D come richiesto dal testo del lab */
+    xil_printf("\n-- Disabilito cache I/D --\n\r");
+    Xil_DCacheDisable();
+    Xil_ICacheDisable();
+
+    measure_fir_with_caches("Cache OFF");
+
+    xil_printf("\nMisura completata.\n\r");
+
+    cleanup_platform();
+    return 0;
+}
