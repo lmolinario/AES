@@ -238,6 +238,7 @@ Lab 5/
 │
 ├── lab5_mnist.c                   → Base implementation (uses weights.h & test_images.h)
 ├── lab5_mnist_custom.c            → Custom DNN (784→64→32→16→10), weights via UART
+├── lab5_mnist_custom+TIPS.c       → Custom DNN with UART optimizations (Q0.8 images, Q1.7 weights)
 │
 ├── group_4/                       → Custom network bin files for your group
 │
@@ -246,9 +247,10 @@ Lab 5/
 ├── AES/                           → Full Xilinx SDK 2019.1 workspace
 │   ├── lab5_mnist/                → SDK project (Base MNIST DNN)
 │   ├── lab5_mnist_custom/         → SDK project (Custom 4-layer DNN)
-│   ├── lab2_hist_equalization/    → SDK project (Lab 2 – Histogram equalization)
+│   ├── lab5_mnist_custom_TIPS/    → SDK project (Optimized UART I/O, Q-format reductions)
 │   ├── lab5_mnist_bsp/            → BSP for base project
 │   ├── lab5_mnist_custom_bsp/     → BSP for custom DNN
+│   ├── lab5_mnist_custom_TIPS_bsp/     → BSP for optimized variant
 │   ├── design_1_wrapper_hw_platform_0/
 │   │       └── design_1_wrapper.hdf  → Exported Vivado hardware platform
 │   └── SDK.log                    → Build / debug session log
@@ -257,6 +259,77 @@ Lab 5/
 
 
 ```
+
+Certo!
+Ti preparo **una sezione breve, elegante e accademica**, perfetta per un README.md, che descrive l’implementazione del file:
+
+👉 **`lab5_mnist_custom+TIPS.c` – Custom Network + Optimization Tips**
+
+### 📌 **Dove inserirla nel README?**
+
+Mettila **subito dopo la sezione dedicata alla Custom Network (Step 7)**, e **prima** della sezione *Project Structure*.
+
+Quindi l’ordine diventa:
+
+1. Step 7 – Custom Network
+2. **📌 Nuova sezione: Optimization Tips Applied** ← *QUI*
+3. Project Structure
+4. Implementation Summary
+5. Output Example
+   … ecc.
+
+---
+
+
+# **Step 8 – Custom Network with Optimization Tips (Q0.8 / Q1.7)**
+
+In aggiunta alla versione standard della rete personalizzata (file `lab5_mnist_custom.c`), è stata sviluppata una variante ottimizzata denominata **`lab5_mnist_custom+TIPS.c`**, che applica due ottimizzazioni suggerite dal documento *Tips and Tricks for Optimization* del docente.
+
+L’obiettivo è ridurre il tempo di trasmissione via UART senza modificare il funzionamento interno della rete, che continua a operare in **formato Q8.8**.
+
+### 🔹 TIP 1 — Ottimizzazione delle immagini (Q0.8 → Q8.8)
+
+Le immagini MNIST presentano sempre un byte alto pari a `0x00`.  
+È quindi possibile trasmetterle come **1 byte (Q0.8)** invece di 2 byte (Q8.8).
+
+La board riconverte ogni pixel tramite:
+
+```c
+buffer[i] = ((short)px) << 8;   // Q0.8 → Q8.8
+````
+
+**Risultato:**
+La trasmissione dell’immagine scende da 1568 B → 784 B (≈ 2× più veloce).
+
+---
+
+### 🔹 TIP 2 — Ottimizzazione dei pesi (Q1.7 → Q8.8)
+
+L'analisi dei pesi mostra che il byte più significativo è sempre `0x00` o `0xFF`, poiché la parte intera rappresenta solo il segno.
+
+I pesi possono quindi essere trasmessi come **singoli byte (Q1.7)** e riconvertiti in Q8.8 tramite:
+
+```c
+buffer[i] = ((short)w) << 1;   // Q1.7 → Q8.8
+```
+
+**Risultato:**
+Riduzione del 50% della dimensione dei parametri trasmessi all’avvio.
+
+---
+
+### 🔹 Obiettivo della variante TIPS
+
+Questa versione del codice:
+
+* riduce la banda UART necessaria
+* mantiene invariata la precisione della rete (Q8.8)
+* non modifica la funzione FC né la logica della DNN
+* rappresenta un’implementazione **didattica, minimale e corretta** delle ottimizzazioni consigliate dal docente
+
+Il file finale è quindi pienamente compatibile con il laboratorio, ma più efficiente in fase di comunicazione.
+
+
 
 
 
