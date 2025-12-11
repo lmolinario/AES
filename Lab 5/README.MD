@@ -206,8 +206,19 @@ Group_4/
 This folder contains:
 
 * a new ONNX model
+<p align="center">
+  <img src="img/onnx_model_group_4.png" alt="Onnx Model Group 4" width="120"/>
+</p>
+
 * new weights and biases
+<p align="center">
+  <img src="img/weights_G_4.png" alt="Onnx Model Group 4" width="360"/>
+</p>
+
 * new test images
+<p align="center">
+  <img src="img/test_image.png" alt="Onnx Model Group 4" width="360"/>
+</p>
 
 Repeat:
 
@@ -221,19 +232,33 @@ Repeat:
 ## **Project Structure**
 
 ```
-Lab5_MNIST_DNN/
+
+
+Lab 5/
 │
-├── AES/                               → SDK workspace
-│   ├── mnist_app/                     → Application project
-│   ├── *_bsp/                         → Board support package
-│   ├── design_1_wrapper_hw_platform   → Hardware platform
+├── lab5_mnist.c                   → Base implementation (uses weights.h & test_images.h)
+├── lab5_mnist_custom.c            → Custom DNN (784→64→32→16→10), weights via UART
 │
-├── app_template.c                     → Starting template
-├── weights.h                          → Base DNN weights and biases
-├── test_images.h                      → Sample images
-├── uart_images/                       → Images to send to UART
-├── README.md                          → Lab documentation (this file)
+├── group_4/                       → Custom network bin files for your group
+│
+├── mnist_from_uart-main/          → Reference UART sender + example Python tools
+│
+├── AES/                           → Full Xilinx SDK 2019.1 workspace
+│   ├── lab5_mnist/                → SDK project (Base MNIST DNN)
+│   ├── lab5_mnist_custom/         → SDK project (Custom 4-layer DNN)
+│   ├── lab2_hist_equalization/    → SDK project (Lab 2 – Histogram equalization)
+│   ├── lab5_mnist_bsp/            → BSP for base project
+│   ├── lab5_mnist_custom_bsp/     → BSP for custom DNN
+│   ├── design_1_wrapper_hw_platform_0/
+│   │       └── design_1_wrapper.hdf  → Exported Vivado hardware platform
+│   └── SDK.log                    → Build / debug session log
+│
+└── README.md                      → Lab documentation
+
+
 ```
+
+
 
 ---
 
