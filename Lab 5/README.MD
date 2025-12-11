@@ -260,25 +260,6 @@ Lab 5/
 
 ```
 
-Certo!
-Ti preparo **una sezione breve, elegante e accademica**, perfetta per un README.md, che descrive l’implementazione del file:
-
-👉 **`lab5_mnist_custom+TIPS.c` – Custom Network + Optimization Tips**
-
-### 📌 **Dove inserirla nel README?**
-
-Mettila **subito dopo la sezione dedicata alla Custom Network (Step 7)**, e **prima** della sezione *Project Structure*.
-
-Quindi l’ordine diventa:
-
-1. Step 7 – Custom Network
-2. **📌 Nuova sezione: Optimization Tips Applied** ← *QUI*
-3. Project Structure
-4. Implementation Summary
-5. Output Example
-   … ecc.
-
----
 
 
 # **Step 8 – Custom Network with Optimization Tips (Q0.8 / Q1.7)**
