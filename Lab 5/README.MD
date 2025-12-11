@@ -45,7 +45,7 @@ You must implement a complete MNIST inference pipeline, following the steps belo
 
 Open the provided ONNX model using:
 
-👉 **[https://netron.app](https://netron.app)**
+ **[https://netron.app](https://netron.app)**
 
 Verify the sequence of layers and tensor dimensions.
 
