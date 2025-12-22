@@ -32,7 +32,7 @@ The hardware platform (from previous labs) includes:
 | `ps7_global_timer` | High-resolution timing for layer-wise and total inference |
 
 The system runs **bare-metal**, without OS support, so all memory management and I/O handling must be implemented explicitly.
-
+All experiments were performed using a single core (CPU0), as required by the assignment.
 ---
 
 ## **Assignment Structure**

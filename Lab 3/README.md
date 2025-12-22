@@ -34,7 +34,7 @@ The system must:
 
 ---
 
-## **Supported Audio Format**
+## **Codec Configuration**
 I2C (XIicPs) is used to configure the SSM2603 codec.
 
 ---
@@ -56,7 +56,7 @@ The Vivado design includes:
 ## **Project Structure**
 
 ```
-Lab3_Audio/
+Lab 3/
 │
 ├── main_step1_loopback.c          → Step 1: audio loopback
 ├── main_step2_fir.c               → Step 2: real-time FIR filtering
