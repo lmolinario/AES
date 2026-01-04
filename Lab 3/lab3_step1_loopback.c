@@ -23,7 +23,7 @@
  *  ------------------------------------------------------------
  *  The ARM Cortex-A9 includes a 64-bit Global Timer clocked at:
  *
- *        CPU_Freq / 2  =  666 MHz / 2  ≈ 333 MHz
+ *        CPU_Freq / 2  =  667 MHz / 2  ≈ 333 MHz
  *
  *  Only the lower 32 bits are used here, accessed through:
  *
@@ -352,7 +352,7 @@ int main()
 	init_platform();
 
 	print("Started!\n\r");
-    xil_printf("=== LAB 3 – Step 1: Fs Measurement (Global Timer) + LOOPBACK ===\n\r");
+    xil_printf("=== LAB 3 === Step 1: Fs Measurement (Global Timer) + LOOPBACK ===\n\r");
 
     // Initialize the audio codec (I²C), the I²S interface, and clocking
 	AudioInitialize(SCU_TIMER_ID, AUDIO_IIC_ID, AUDIO_CTRL_BASEADDR);
@@ -467,13 +467,12 @@ int main()
              *  no interference with the timing-critical section.
              **********************************************************************/
 
-            xil_printf("Δticks = %u   Fs ≈ %d.%02d Hz\n\r",
+            xil_printf("delta_ticks = %u   Fs ~= %d.%02d Hz\n\r",
                        delta,
                        Fs100 / 100,
                        Fs100 % 100);
 
         }
-
 
         /* Audio passthrough (loopback) */
         I2SFifoWrite(AUDIO_FIFO, L);

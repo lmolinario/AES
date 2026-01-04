@@ -107,6 +107,31 @@ Fs     = 333e6 / Δticks
 ```
 
 ---
+Measured Output
+
+
+<p align="center">
+  <img src="../img/Lab3_step1.png" alt="Zybo Z7 board used in the labs" width="650"/>
+</p>
+<p align="center"><i>Photo taken during AES Lab</i></p>
+
+
+The measured sampling frequency is approximately 47.7 kHz, slightly lower than
+the nominal 48 kHz.
+
+This deviation is expected and is mainly due to:
+
+Integer clock dividers used to derive LRCLK from the master clock
+
+Asynchronous clock domains between PL (audio subsystem) and PS (Global Timer)
+
+Finite timer resolution and measurement granularity
+
+The result confirms that the audio subsystem is correctly configured and stable,
+operating very close to the target sampling rate.
+---
+
+---
 
 ### 🔹 **(2) Step 2 – FIR Audio Filtering (`lab3_step2_fir.c`)**
 
