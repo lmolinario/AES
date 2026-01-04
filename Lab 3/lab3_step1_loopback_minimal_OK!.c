@@ -61,8 +61,25 @@
 #include "xil_printf.h"
 #include "xil_io.h"
 #include "xiicps.h"
-#include "timer_ps.h"
 #include <math.h>
+
+/*
+ * timer_ps.h
+ *
+ * This header provides access to the SCU Timer utility functions.
+ *
+ * In this application, the SCU Timer is used exclusively to generate
+ * software delays during the initialization of the SSM2603 audio codec
+ * (e.g. after reset and power-up sequences), as required by the device
+ * timing specifications.
+ * The SCU Timer is NOT used for sampling frequency or performance
+ * measurements. All timing measurements related to audio sampling
+ * frequency (Fs) and execution time are performed using the ARM
+ * Cortex-A9 Global Timer, accessed through memory-mapped registers.
+ */
+#include "timer_ps.h"
+
+
 
 /* I2S Register offsets */
 #define I2S_RESET_REG 		0x00
@@ -103,7 +120,9 @@
 
 #define AUDIO_FIFO XPAR_AXI_FIFO_MM_S_0_BASEADDR
 
-#define FIR_FIFO XPAR_AXI_FIFO_MM_S_1_BASEADDR
+#define FIR_FIFO XPAR_AXI_FIFO_MM_S_1_BASEADDR // FIR_FIFO not used in STEP 1
+
+
 #define GLOBAL_TMR_BASEADDR          XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
 
 #define GTIMER_CONTROL_OFFSET        0x08   // Offset of the Global Timer control register (enable, auto-increment)
@@ -292,6 +311,9 @@ return data;
 
 }
 
+
+// FIR FIFO initialized not used in STEP 1
+
 void initialize_FIFO(u32 fifoAddr){
 	Xil_Out32(AUDIO_FIFO + 0x2c, 0);
 
@@ -432,7 +454,7 @@ int main()
              **********************************************************************/
 
 
-            float Fs = 333000000.0f / (float)delta;
+            float Fs = (float)GLOBAL_TMR_FREQ / (float)delta;
             int Fs100 = (int)(Fs * 100);
 
             /**********************************************************************
