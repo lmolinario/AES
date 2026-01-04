@@ -20,7 +20,7 @@ Students must prepare the following implementations:
 
 * **Step 1 – Loopback** (raw passthrough)
 * **Step 2 – FIR Filtering** (real-time convolution)
-* **Step 3 – FIR Timing Analysis** (Global Timer)
+* **Step 3 – FIR Timing Analysis** (Global Timer performance evaluation)
 
 The system must:
 
@@ -35,7 +35,9 @@ The system must:
 ---
 
 ## **Codec Configuration**
-I2C (XIicPs) is used to configure the SSM2603 codec.
+The SSM2603 audio codec is configured via I2C using the XIicPs driver.
+Configuration includes clocking, audio format, sampling frequency, and channel enablement.
+
 
 ---
 
@@ -69,7 +71,7 @@ Lab 3/
 │   ├── *_bsp/                     → Board Support Packages
 │   └── design_1_wrapper_hw_0/     → Hardware platform (.hdf/.xsa)
 │
-└── README.md
+└── README.md                      → Lab documentation
 ```
 
 **Notes:**
@@ -102,8 +104,8 @@ u32 t = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
 The sampling frequency is computed as:
 
 ```
-Δticks = t[n+1] − t[n]
-Fs     = 333e6 / Δticks
+delta_ticks = t[n+1] − t[n]
+Fs     = 333e6 / delta_ticks
 ```
 
 ---
@@ -116,20 +118,15 @@ Measured Output
 <p align="center"><i>Measured Output: frequency is approximately 47.7 kHz </i></p>
 
 
-The measured sampling frequency is approximately 47.7 kHz, slightly lower than
-the nominal 48 kHz.
+The measured value is slightly lower than the nominal 48 kHz due to:
 
-This deviation is expected and is mainly due to:
+- Integer clock dividers
 
-Integer clock dividers used to derive LRCLK from the master clock
+- Asynchronous clock domains (PL vs PS)
 
-Asynchronous clock domains between PL (audio subsystem) and PS (Global Timer)
+- Finite timer resolution
 
-Finite timer resolution and measurement granularity
-
-The result confirms that the audio subsystem is correctly configured and stable,
-operating very close to the target sampling rate.
----
+The result confirms correct and stable audio subsystem configuration.
 
 ---
 
@@ -182,46 +179,8 @@ The FIR implementation has been validated using the reference test vectors provi
   * floating-point to integer truncation effects
 * The overall filter response, stability, symmetry, and frequency behavior match the expected results for both low-pass and high-pass configurations
 
-This validation confirms the correct functional implementation of the FIR convolution as specified.
+The overall response, stability, and frequency behavior match the expected results.
 
----
-
-#### **Test Vector Self-Test Code**
-
-```c
-#include "TestVector.h"
-
-#define TEST_LEN_250 (sizeof(test_input) / sizeof(test_input[0]))
-
-int test_input[]     = { inputTest_250 };
-int test_output_LP[] = { outputTest_F_250_LP };
-int test_output_HP[] = { outputTest_F_250_HP };
-
-void FIR_selftest(void)
-{
-    int buffer[N_LP] = {0};
-    int y;
-
-    /* Sampling frequency ≈ 47.7 kHz */
-    xil_printf("\n=== FIR SELF-TEST LP (250 Hz) ===\n\r");
-
-    for (int n = 0; n < TEST_LEN_250; n++) {
-
-        /* Sliding window update */
-        for (int i = N_LP - 1; i > 0; i--) {
-            buffer[i] = buffer[i - 1];
-        }
-        buffer[0] = test_input[n];
-
-        /* FIR filtering */
-        y = FIR_filter(buffer, LP, N_LP);
-
-        /* Output comparison */
-        xil_printf("n=%3d | y=%6d | exp=%6d\n\r",
-                   n, y, test_output_LP[n]);
-    }
-}
-```
 
 ---
 
