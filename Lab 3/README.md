@@ -34,7 +34,7 @@ The system must:
 
 ---
 
-## **Supported Audio Format**
+## **Codec Configuration**
 I2C (XIicPs) is used to configure the SSM2603 codec.
 
 ---
@@ -56,11 +56,11 @@ The Vivado design includes:
 ## **Project Structure**
 
 ```
-Lab3_Audio/
+Lab 3/
 │
-├── main_step1_loopback.c          → Step 1: audio loopback
-├── main_step2_fir.c               → Step 2: real-time FIR filtering
-├── main_step3_timing.c            → Step 3: timing and cycles/tap analysis
+├── lab3_step1_loopback.c          → Step 1: audio loopback
+├── lab3_step2_fir.c               → Step 2: real-time FIR filtering
+├── lab3_step3_timing.c            → Step 3: timing and cycles/tap analysis
 │
 ├── AES/                           → Full Xilinx SDK/Vitis workspace
 │   ├── lab3_step1_loopback/       → Step 1 SDK project
@@ -82,7 +82,7 @@ Lab3_Audio/
 
 ## **Implementations Summary**
 
-### 🔹 **(1) Step 1 – Loopback (`main_step1_loopback.c`)**
+### 🔹 **(1) Step 1 – Loopback (`lab3_step1_loopback.c`)**
 
 Implements a raw passthrough of audio samples:
 
@@ -108,7 +108,7 @@ Fs     = 333e6 / Δticks
 
 ---
 
-### 🔹 **(2) Step 2 – FIR Audio Filtering (`main_step2_fir.c`)**
+### 🔹 **(2) Step 2 – FIR Audio Filtering (`lab3_step2_fir.c`)**
 
 Real-time software FIR filtering:
 
@@ -144,7 +144,7 @@ int FIR_filter(int *buffer, float *h, int N);
 
 ---
 
-### 🔹 **(3) Step 3 – FIR Timing (`main_step3_timing.c`)**
+### 🔹 **(3) Step 3 – FIR Timing (`lab3_step3_timing.c`)**
 
 Analyzes computational cost using the Global Timer:
 

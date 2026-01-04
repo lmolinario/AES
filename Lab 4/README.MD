@@ -39,13 +39,13 @@ Both cores access the same DDR memory region, allowing the implementation of par
 
 ---
 
-## **Assignment Structure**
+## **Implementations Summary**
 
 You must produce **two coordinated software applications**:
 
 ---
 
-# **Step 1 – Create Two Application Projects**
+### 🔹 **(1) Step 1  – Create Two Application Projects**
 
 Create two SDK/Vitis application projects:
 
@@ -71,7 +71,7 @@ containing:
 
 ---
 
-# **Step 2 – Configure Shared Memory in DDR**
+### 🔹 **(2) Step 2  – Configure Shared Memory in DDR**
 
 Define a shared memory region at a **fixed DDR address**, e.g.:
 
@@ -104,7 +104,7 @@ This region must be **excluded from the linker script** of both applications.
 
 ---
 
-# **Step 3 – Implement Parallel Vector Addition**
+### 🔹 **(3) Step 3  – Implement Parallel Vector Addition**
 
 ## **Master (Core 0)**
 
@@ -127,7 +127,7 @@ This region must be **excluded from the linker script** of both applications.
 
 ---
 
-# **Step 4 – Modify Linker Scripts**
+### 🔹 **(4) Step 4 – Modify Linker Scripts**
 
 Edit `lscript.ld` for **both projects**:
 
@@ -151,7 +151,7 @@ This guarantees that memory used for communication is not overwritten by either 
 
 ---
 
-# **Step 5 – System Debugger Multi-Core Configuration**
+### 🔹 **(5) Step 5  – System Debugger Multi-Core Configuration**
 
 Create a **System Debugger** run configuration.
 
@@ -180,7 +180,7 @@ This allows both cores to run simultaneously from the correct starting point.
 
 ---
 
-# **Step 6 – Measure Execution Time with Global Timer**
+### 🔹 **(6) Step 6 – Measure Execution Time with Global Timer**
 
 Use the cycle counter:
 
