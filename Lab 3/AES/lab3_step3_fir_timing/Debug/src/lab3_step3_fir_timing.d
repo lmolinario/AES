@@ -20,7 +20,8 @@ src/lab3_step3_fir_timing.o src/lab3_step3_fir_timing.o: \
  ../src/timer_ps.h \
  ../../lab3_step3_fir_timing_bsp/ps7_cortexa9_0/include/xil_types.h \
  ../../lab3_step3_fir_timing_bsp/ps7_cortexa9_0/include/xparameters.h \
- ../../lab3_step3_fir_timing_bsp/ps7_cortexa9_0/include/xil_cache.h
+ ../../lab3_step3_fir_timing_bsp/ps7_cortexa9_0/include/xil_cache.h \
+ ../src/TestVector.h
 
 ../src/platform.h:
 
@@ -65,3 +66,5 @@ src/lab3_step3_fir_timing.o src/lab3_step3_fir_timing.o: \
 ../../lab3_step3_fir_timing_bsp/ps7_cortexa9_0/include/xparameters.h:
 
 ../../lab3_step3_fir_timing_bsp/ps7_cortexa9_0/include/xil_cache.h:
+
+../src/TestVector.h:

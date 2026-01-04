@@ -23,7 +23,7 @@
  *  ------------------------------------------------------------
  *  The ARM Cortex-A9 includes a 64-bit Global Timer clocked at:
  *
- *        CPU_Freq / 2  =  666 MHz / 2  ≈ 333 MHz
+ *        CPU_Freq / 2  =  667 MHz / 2  ≈ 333 MHz
  *
  *  Only the lower 32 bits are used here, accessed through:
  *
@@ -37,9 +37,9 @@
  *    5) sampling frequency Fs = 1 / Ts
  *
  *  IMPORTANT:
- *    The printing of t0/t1 results is performed *after* the
- *    measurement has completed, ensuring that UART I/O does not
- *    interfere with the timing, as required by the assignment.
+ *    UART printing is performed only after t0/t1 are acquired,
+ *    ensuring that serial I/O does not perturb the measurement,
+ *    as required by the assignment.
  *
  *
  *  Platform
@@ -48,9 +48,9 @@
  *   • Audio Codec: Analog Devices SSM2603 (I²C control, I²S data)
  *   • Interfaces:
  *        – AXI-I2S for audio RX/TX
- *        – AXI FIFO for streaming samples
+ *        – AXI FIFO for sample buffering
  *        – PS I²C for codec configuration
- *        – PS Global Timer for frequency measurement
+ *        – PS Global Timer for timing analysis
  *   • Tools: Xilinx SDK / Vitis + UART terminal (115200 baud, 8N1)
  *
  ***************************************************************/
@@ -61,8 +61,25 @@
 #include "xil_printf.h"
 #include "xil_io.h"
 #include "xiicps.h"
-#include "timer_ps.h"
 #include <math.h>
+
+/*
+ * timer_ps.h
+ *
+ * This header provides access to the SCU Timer utility functions.
+ *
+ * In this application, the SCU Timer is used exclusively to generate
+ * software delays during the initialization of the SSM2603 audio codec
+ * (e.g. after reset and power-up sequences), as required by the device
+ * timing specifications.
+ * The SCU Timer is NOT used for sampling frequency or performance
+ * measurements. All timing measurements related to audio sampling
+ * frequency (Fs) and execution time are performed using the ARM
+ * Cortex-A9 Global Timer, accessed through memory-mapped registers.
+ */
+#include "timer_ps.h"
+
+
 
 /* I2S Register offsets */
 #define I2S_RESET_REG 		0x00
@@ -103,25 +120,38 @@
 
 #define AUDIO_FIFO XPAR_AXI_FIFO_MM_S_0_BASEADDR
 
-#define FIR_FIFO XPAR_AXI_FIFO_MM_S_1_BASEADDR
+#define FIR_FIFO XPAR_AXI_FIFO_MM_S_1_BASEADDR // FIR_FIFO not used in STEP 1
+
+
 #define GLOBAL_TMR_BASEADDR          XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
-#define GTIMER_CONTROL_OFFSET        0x08   // Control register
-#define GLOBAL_TMR_FREQ              333000000  // 333 MHz
+
+#define GTIMER_CONTROL_OFFSET        0x08   // Offset of the Global Timer control register (enable, auto-increment)
+#define GLOBAL_TMR_FREQ              333000000  // Global Timer clock frequency: CPU/2 = 333 MHz
 
 /* --------------------------------------------------------------------------
- *  GLOBAL TIMER ENABLE (required by the assignment)
+ *  GLOBAL TIMER – ENABLE & READOUT
  *
- *  To use the Global Timer for Fs measurement:
- *     bit0 = ENABLE
- *     bit1 = AUTO-INCREMENT
+ *  The Cortex-A9 Global Timer is a 64-bit counter incremented at a clock
+ *  running at half the CPU frequency (667 MHz / 2 ≈ 333 MHz).
  *
- *  → Control Register value = 0x03
+ *  To use it for sampling-frequency (Fs) measurement:
+ *      • enable the timer            → bit0 = 1
+ *      • enable auto-increment mode  → bit1 = 1
  *
- *  The lab explicitly requires reading the 32-bit LSB counter:
+ *  Control register value to enable both features:
+ *                      0x03  (0000 0011b)
  *
- *     Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET)
+ *  *** COUNTER READOUT ***
+ *  The assignment explicitly requires reading the *lower 32 bits* of the
+ *  64-bit counter. These are accessed using:
+ *
+ *      Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET)
+ *
+ *  IMPORTANT:
+ *      Do NOT read from the timer base address, as it corresponds to the
+ *      CONTROL register. The LSB counter is located at offset 0x00.
  * -------------------------------------------------------------------------- */
-#define GTIMER_COUNTER_LOWER_OFFSET  0x00   // Global Timer LSB counter
+#define GTIMER_COUNTER_LOWER_OFFSET  0x00   // Offset of the 32-bit LSB counter register
 
 
 
@@ -265,9 +295,9 @@ void I2SFifoWrite (u32 i2sBaseAddr, u32 audioData)
 
 
 /* --------------------------------------------------------------------------
- *  BLOCKING I²S READ (as required by Step 1)
+ *  BLOCKING I²S READ
  *
- *  The lab requires verifying that I²S acquisition is *blocking*:
+ *  The lab requires verifying that I²S acquisition is blocking:
  *  the function waits until the RX FIFO contains data.
  *
  *  This ensures synchronous sample-by-sample acquisition during loopback.
@@ -281,21 +311,19 @@ return data;
 
 }
 
+
+// FIR FIFO initialized not used in STEP 1
+
 void initialize_FIFO(u32 fifoAddr){
 	Xil_Out32(AUDIO_FIFO + 0x2c, 0);
 
 	    // init
 	    Xil_Out32(fifoAddr + FIFO_ISR, 0xFFFFFFFF);
 	    Xil_Out32(fifoAddr + FIFO_IER, 0x0C000000);
-
 	    Xil_Out32(fifoAddr + FIFO_TDR, 0x00000000);
-
-
 		Xil_Out32(fifoAddr + FIFO_ISR, 0xFFFFFFFF);
-
-
 	    Xil_Out32(fifoAddr + FIFO_IER, 0x04100000);
-		    Xil_Out32(fifoAddr + FIFO_ISR, 0x00100000);
+		Xil_Out32(fifoAddr + FIFO_ISR, 0x00100000);
 
 
 
@@ -303,17 +331,19 @@ void initialize_FIFO(u32 fifoAddr){
 
 
 /* --------------------------------------------------------------------------
- *   LOOPBACK TEST (mandatory for Step 1)
+ *   LOOPBACK TEST
  *
- *  Pipeline tested:
- *       ADC → I²S RX → CPU → I²S TX → DAC
+ *   Tested audio pipeline:
+ *        ADC → I²S RX → CPU → I²S TX → DAC
  *
- *  The CPU reads a sample and immediately writes it back to TX.
+ *   The CPU reads each incoming stereo sample and immediately forwards it
+ *   to the I²S TX path. This implements a real-time IN → OUT passthrough.
  *
- *  This confirms:
- *     • codec initialized correctly (I²C)
- *     • I²S RX working in blocking mode
- *     • end-to-end audio path functioning
+ *   Successful loopback confirms:
+ *      • correct initialization of the SSM2603 codec via I²C
+ *      • correct blocking acquisition through the I²S RX FIFO
+ *      • proper functionality of the complete audio chain
+ *        (ADC → CPU → DAC)
  * -------------------------------------------------------------------------- */
 
 int main()
@@ -322,10 +352,12 @@ int main()
 	init_platform();
 
 	print("Started!\n\r");
-    xil_printf("=== LAB 3 – Step 1: Fs Measurement (Global Timer) ===\n\r");
+    xil_printf("=== LAB 3 === Step 1: Fs Measurement (Global Timer) + LOOPBACK ===\n\r");
 
+    // Initialize the audio codec (I²C), the I²S interface, and clocking
 	AudioInitialize(SCU_TIMER_ID, AUDIO_IIC_ID, AUDIO_CTRL_BASEADDR);
 
+    // Initialize and clear the AXI FIFO used for audio streaming
 	initialize_FIFO(AUDIO_FIFO);
 
 
@@ -333,63 +365,69 @@ int main()
      *  ENABLE GLOBAL TIMER
      *
      *  Required by the assignment:
-     *     - timer must be explicitly enabled
-     *     - auto-increment mode must be active
+     *      - the timer must be explicitly enabled
+     *      - auto-increment mode must be activated
      *
-     *  → CONTROL = 0x03
+     *  → CONTROL register value = 0x03
+     *        bit0 = 1 → enable timer
+     *        bit1 = 1 → enable auto-increment
      *
-     *  Without this, the timer stays at 0 and Fs = 0 Hz.
+     *  Without enabling the timer, the counter remains at zero and the
+     *  sampling-frequency measurement (Fs) would always return 0 Hz.
      * ---------------------------------------------------------------------- */
 
-    /* Enable Global Timer: bit0=enable, bit1=auto-inc */
+    /* Write 0x03 to the Global Timer control register (enable + auto-inc) */
     Xil_Out32(GLOBAL_TMR_BASEADDR + GTIMER_CONTROL_OFFSET, 0x03);
 
-    u32 t0 = 0, t1 = 0;
-    int j = 0;
+    u32 t0 = 0, t1 = 0;   // timer snapshots
+    int j = 0;            // loop counter for delayed measurement
 
-/* --------------------------------------------------------------------------
- *  STEP 1 – SIMPLE LOOPBACK TEST (IN → OUT)
- *
- *  Come richiesto dal laboratorio:
- *      - si acquisisce un campione stereo (L,R)
- *      - si riproduce immediatamente sul FIFO TX
- *
- *  Questo verifica il funzionamento end-to-end della pipeline:
- *      ADC → I²S RX → CPU → I²S TX → DAC
- *
- *  È il comportamento minimo per testare correttamente l’hardware audio.
- * -------------------------------------------------------------------------- */
+
+    /* --------------------------------------------------------------------------
+     *  STEP 1 – SIMPLE LOOPBACK TEST (IN → OUT)
+     *
+     *  As required by the lab:
+     *      - acquire one stereo sample (L, R)
+     *      - immediately forward it to the TX FIFO
+     *
+     *  This verifies the correct end-to-end behavior of the audio chain:
+     *      ADC → I²S RX → CPU → I²S TX → DAC
+     *
+     *  This is the minimum working configuration needed to validate
+     *  proper audio hardware operation.
+     * -------------------------------------------------------------------------- */
 
     while (1)
     {
-        /* Stereo sample */
+        /* Read one stereo sample from the I²S RX FIFO */
         u32 L = I2SFifoRead(AUDIO_FIFO);
         u32 R = I2SFifoRead(AUDIO_FIFO);
 
-
         /**************************************************************************
-         * LETTURA CORRETTA DEL CONTATORE 32 BIT (LSB)
+         * CORRECT READOUT OF THE 32-BIT (LSB) GLOBAL TIMER COUNTER
          *
-         * NEL CODICE DI ESEMPIO FORNITO DAL PROFESSORE:
-         *   times[0] = Xil_In32(GLOBAL_TMR_BASEADDR);
+         *  In the reference code provided by the instructor:
+         *      times[0] = Xil_In32(GLOBAL_TMR_BASEADDR);
          *
-         * → Legge l'indirizzo base: NON il contatore, ma il CONTROL REGISTER,
-         *   quindi sempre 0 → misurazione impossibile.
+         *  → This reads the *base address*, which corresponds to the CONTROL
+         *    register, not the counter. Since the CONTROL register does not
+         *    increment, the returned value is always 0 → no valid measurement.
          *
-         * VERSIONE CORRETTA QUI:
-         *   Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET)
+         *  Correct approach:
+         *      Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET)
          *
-         * Così leggiamo realmente il CONTATORE (tick del Global Timer).
-         *************************************************************************/
+         *  This retrieves the actual tick count from the lower 32 bits
+         *  of the Global Timer.
+         **************************************************************************/
 
         /* ------------------------------------------------------------------
-         *  CORRECT TIMER READOUT
+         *  CORRECT TIMER READOUT (required by the assignment)
          *
-         *  The base address holds the CONTROL register (always 0),
-         *  so the assignment requires reading:
+         *  The counter LSB is mapped at:
          *
-         *     GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET
+         *      GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET
          *
+         *  The base address alone must never be used.
          * ------------------------------------------------------------------ */
 
         if (j == 300)
@@ -401,41 +439,42 @@ int main()
             u32 delta = t1 - t0;
 
             /**********************************************************************
-             * CALCOLO CORRETTO DELLA FREQUENZA DI CAMPIONAMENTO (Fs)
+             * CORRECT SAMPLING FREQUENCY (Fs) COMPUTATION
              *
-             * CPU clock = 667 MHz
-             * Global Timer clock = CPU/2 → 333 MHz
+             *  CPU clock      = 667 MHz
+             *  Global Timer   = CPU/2 = 333 MHz
              *
-             * Quindi:
-             *   1 tick = 1 / 333e6 = 3 ns
+             *  Therefore:
+             *      1 tick = 1 / 333e6 ≈ 3 ns
              *
-             * Frequenza di campionamento Fs:
-             *   Fs = clock_timer / delta
-             *      = 333 MHz / delta
+             *  Sampling frequency:
+             *      Fs = TIMER_CLOCK / delta
+             *         = 333 MHz / delta
              *
              **********************************************************************/
 
 
-            float Fs = 333000000.0f / (float)delta;
+            float Fs = (float)GLOBAL_TMR_FREQ / (float)delta;
             int Fs100 = (int)(Fs * 100);
 
             /**********************************************************************
-             * STAMPA NON DISTURBANTE
+             * NON-INTRUSIVE PRINTING
              *
-             * Nel primo codice le stampe di initialize_FIFO() introdussero ritardi
-             * enormi → misurazione NON più affidabile.
+             *  In the initial version, printing inside initialization functions
+             *  introduced significant delays → invalid measurements.
              *
-             * Ora stampiamo SOLO dopo t0 e t1 → nessuna interferenza.
+             *  Now printing occurs only after t0 and t1 are collected, ensuring
+             *  no interference with the timing-critical section.
              **********************************************************************/
-            xil_printf("Δticks = %u   Fs ≈ %d.%02d Hz\n\r",
+
+            xil_printf("delta_ticks = %u   Fs ~= %d.%02d Hz\n\r",
                        delta,
                        Fs100 / 100,
                        Fs100 % 100);
 
         }
 
-
-        /* Loopback */
+        /* Audio passthrough (loopback) */
         I2SFifoWrite(AUDIO_FIFO, L);
         I2SFifoWrite(AUDIO_FIFO, R);
 

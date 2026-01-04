@@ -1,8 +1,8 @@
-20:45:17 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+00:29:28 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
 make pre-build main-build 
 a9-linaro-pre-build-step
 ' '
 make: Nothing to be done for 'main-build'.
 
-20:45:17 Build Finished (took 363ms)
+00:29:29 Build Finished (took 312ms)
 

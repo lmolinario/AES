@@ -40,17 +40,21 @@
  *
  *  Filter Selection (Using Switches)
  *  ------------------------------------------------------------
- *    SW0 = 1   → enable Low-Pass filter  (LP)
- *    SW1 = 1   → enable High-Pass filter (HP)
+ *    SW0 = 1  → enable Low-Pass filter (LP)
+ *    SW1 = 1  → enable High-Pass filter (HP)
+ *    SW2 = 1  → enable Low-Pass (aggressive) filter
+ *    SW3 = 1  → enable High-Pass (aggressive) filter
  *    Otherwise → raw audio passthrough (clean)
  *
- *  Additional Notes
+ *  Notes on Filter Behavior
  *  ------------------------------------------------------------
- *  • The FIR implementation is fully software-based.
- *  • Coefficients are defined at the top of main.c.
- *  • More aggressive LP/HP kernels may be substituted as needed.
+ *  • Only one filter should be active at a time; priority follows
+ *    the order SW0 → SW1 → SW2 → SW3.
+ *  • Aggressive filters use extended kernels (higher tap count),
+ *    giving steeper roll-off.
+ *  • Clean passthrough preserves the original audio stream.
  *  • External tone generators (e.g. szynalski.com/tone-generator)
- *    can be used to validate filter behavior.
+ *    can be used to validate the filter response in real time.
  *
  *
  *  Platform
@@ -118,8 +122,10 @@
 
 #define FIR_FIFO XPAR_AXI_FIFO_MM_S_1_BASEADDR
 #define GLOBAL_TMR_BASEADDR XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
+
+
 /* ------------------------------------------------------------ */
-/*				Low-Pass and High-Pass FIR filter coefficients									*/
+/*				Low-Pass and High-Pass FIR filter coefficients
 /* ------------------------------------------------------------ */
 
 #define coeffLP -1.692219e-02, 5.043750e-02,3.935835e-02,4.341238e-02,5.137933e-02,5.982048e-02,6.748827e-02, 7.379049e-02, 7.824605e-02, 8.052560e-02,8.052560e-02, 7.824605e-02, 7.379049e-02, 6.748827e-02,5.982048e-02,5.137933e-02,4.341238e-02,3.935835e-02,5.043750e-02,-0.0169221860
@@ -160,6 +166,15 @@ float HP_AGG[] = { coeffHP_AGG };
 
 float LP[]={coeffLP};
 float HP[]={coeffHP};
+
+#include "TestVector.h"
+#define TEST_LEN_250 (sizeof(test_input) / sizeof(test_input[0]))
+
+
+int test_input[]  = { inputTest_250 };
+int test_output_LP[] = { outputTest_F_250_LP };
+int test_output_HP[] = { outputTest_F_250_HP };
+
 
 
 /* ------------------------------------------------------------ */
@@ -325,6 +340,7 @@ void initialize_FIFO(u32 fifoAddr){
 }
 
 
+
 // GENERIC FIR FILTER: y[n] = sum_{k=0}^{taps-1} h[k] * x[n-k]
 int FIR_filter(int *buffer, float *coeff, int taps)
 {
@@ -343,14 +359,58 @@ int FIR_filter(int *buffer, float *coeff, int taps)
         acc += coeff[k] * (float)buffer[k];
     }
 
+
     /* Return the filtered sample as an integer.
      * The output of the FIR is floating-point, but audio samples
      * are represented as integers in the I²S data path.
      */
+
     return (int)acc;
+
 }
 
 
+void FIR_selftest_LP(void) //from TestVector.h
+{
+    int buffer[N_LP] = {0};
+    int y;//frequency is approximately 47.7 kHz
+
+    xil_printf("\n=== FIR SELF-TEST LP (250 Hz) ===\n\r"); // from
+
+    for (int n = 0; n < TEST_LEN_250; n++) {
+
+        for (int i = N_LP - 1; i > 0; i--) {
+            buffer[i] = buffer[i - 1];
+        }
+        buffer[0] = test_input[n];
+
+        y = FIR_filter(buffer, LP, N_LP);
+
+        xil_printf("n=%3d | y=%6d | exp=%6d\n\r",
+                   n, y, test_output_LP[n]);
+    }
+}
+
+void FIR_selftest_HP(void) //from TestVector.h
+{
+    int buffer[N_HP] = {0};
+    int y;
+
+    xil_printf("\n=== FIR SELF-TEST HP (250 Hz) ===\n\r");
+
+    for (int n = 0; n < TEST_LEN_250; n++) {
+
+        for (int i = N_HP - 1; i > 0; i--) {
+            buffer[i] = buffer[i - 1];
+        }
+        buffer[0] = test_input[n];
+
+        y = FIR_filter(buffer, HP, N_HP);
+
+        xil_printf("n=%3d | y=%6d | exp=%6d\n\r",
+                   n, y, test_output_HP[n]);
+    }
+}
 
 
 int main()
@@ -358,17 +418,22 @@ int main()
     init_platform();
     /* Initialize the underlying BSP (UART, caches, stdout redirection, etc.)
      * This is required before any I/O or platform-specific operations. */
-    print("Started!\n\r");
 
-    xil_printf("\n=== LAB3 – Step 2: FIR Filtering ===\n\r");
+    FIR_selftest_LP();	 // ← STEP 2 – functional validation with TestVector.h
+    FIR_selftest_HP();   // ← STEP 2 – functional validation with TestVector.h
+
+
+    print("\nStarted!\n\r");
+
+    xil_printf("\n=== LAB3 === Step 2: FIR Filtering ===\n\r");
 
     xil_printf("\nFilter selection via board switches:\n\r");
 
-    xil_printf("\n  SW0 = 1  →  Low-Pass filter  (basic kernel)\n\r");
-    xil_printf("\n  SW1 = 1  →  High-Pass filter (basic kernel)\n\r");
-    xil_printf("\n  SW2 = 1  →  Low-Pass filter  (aggressive kernel)\n\r");
-    xil_printf("\n  SW3 = 1  →  High-Pass filter (aggressive kernel)\n\r");
-    xil_printf("\n  No switches ON → raw audio passthrough\n");
+    xil_printf("\n  SW0 = 1	Low-Pass filter  (basic kernel)\n\r");
+    xil_printf("\n  SW1 = 1	High-Pass filter (basic kernel)\n\r");
+    xil_printf("\n  SW2 = 1	Low-Pass filter  (aggressive kernel)\n\r");
+    xil_printf("\n  SW3 = 1	High-Pass filter (aggressive kernel)\n\r");
+    xil_printf("\n  No switches ON = raw audio passthrough\n");
     xil_printf(" \n\n");
 
 
@@ -433,8 +498,10 @@ int main()
          *       FILTER SELECTION
          * -----------------------------
          * Read switch inputs from the GPIO.
-         *   SW0 → Low-Pass filter
-         *   SW1 → High-Pass filter
+         *   SW0 → Low-Pass (base) filter
+         *   SW1 → High-Pass (base) filter
+         *   SW2 → Low-Pass (aggressive) filter
+         *   SW3 → High-Pass (aggressive) filter
          *   none → raw passthrough
          */
         u32 sw = Xil_In32(SWI_BASE_ADDR);

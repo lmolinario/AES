@@ -111,9 +111,9 @@ Measured Output
 
 
 <p align="center">
-  <img src="../img/Lab3_step1.png" alt="Zybo Z7 board used in the labs" width="650"/>
+  <img src="../img/Lab3_step1.png" alt="Photo taken during AES Lab" width="650"/>
 </p>
-<p align="center"><i>Photo taken during AES Lab</i></p>
+<p align="center"><i>Measured Output: frequency is approximately 47.7 kHz </i></p>
 
 
 The measured sampling frequency is approximately 47.7 kHz, slightly lower than
@@ -167,6 +167,73 @@ A single filter is selected via GPIO switches.
 int FIR_filter(int *buffer, float *h, int N);
 ```
 
+
+---
+
+#### **Validation with Test Vectors**
+
+The FIR implementation has been validated using the reference test vectors provided with the assignment.
+
+* Input samples are applied sequentially to the FIR filter using a sliding window
+* The resulting output sequence is compared against the expected reference output vectors
+* Minor discrepancies observed in the initial samples are due to:
+
+  * zero-initialized buffer state (filter transient response)
+  * floating-point to integer truncation effects
+* The overall filter response, stability, symmetry, and frequency behavior match the expected results for both low-pass and high-pass configurations
+
+This validation confirms the correct functional implementation of the FIR convolution as specified.
+
+---
+
+#### **Test Vector Self-Test Code**
+
+```c
+#include "TestVector.h"
+
+#define TEST_LEN_250 (sizeof(test_input) / sizeof(test_input[0]))
+
+int test_input[]     = { inputTest_250 };
+int test_output_LP[] = { outputTest_F_250_LP };
+int test_output_HP[] = { outputTest_F_250_HP };
+
+void FIR_selftest(void)
+{
+    int buffer[N_LP] = {0};
+    int y;
+
+    /* Sampling frequency ≈ 47.7 kHz */
+    xil_printf("\n=== FIR SELF-TEST LP (250 Hz) ===\n\r");
+
+    for (int n = 0; n < TEST_LEN_250; n++) {
+
+        /* Sliding window update */
+        for (int i = N_LP - 1; i > 0; i--) {
+            buffer[i] = buffer[i - 1];
+        }
+        buffer[0] = test_input[n];
+
+        /* FIR filtering */
+        y = FIR_filter(buffer, LP, N_LP);
+
+        /* Output comparison */
+        xil_printf("n=%3d | y=%6d | exp=%6d\n\r",
+                   n, y, test_output_LP[n]);
+    }
+}
+```
+
+---
+
+
+
+
+<p align="center">
+  <img src="../img/Lab3_step2_1.png" alt="Filter selection via board switches" width="650"/>
+</p>
+<p align="center"><i>Filter selection via board switches</i></p>
+
+
 ---
 
 ### 🔹 **(3) Step 3 – FIR Timing (`lab3_step3_timing.c`)**
@@ -178,11 +245,16 @@ Analyzes computational cost using the Global Timer:
 * Maximum number of taps sustainable at 48 kHz
 * Comparison **cache ON vs cache OFF**
 
-Example:
+Output Example:
 
-```
-N = 20 | FIR = 860 cycles | 43 cycles/tap | Max taps ≈ 160
-```
+<p align="center"> <img src="../img/Lab3_step2_3.png" alt="FIR timing results via UART" width="650"/> </p> <p align="center"><i>UART output showing FIR execution-time analysis (cache ON / cache OFF)</i></p>
+
+**Result Summary**
+
+The FIR filter meets real-time requirements at **48 kHz** with a wide safety margin.
+With **caches enabled**, the execution time per sample is well below the available budget, allowing hundreds of taps in theory.
+With **caches disabled**, execution time increases significantly, but real-time operation remains feasible for kernels up to **~25–30 taps**, which covers the filters used in this lab.
+
 
 ---
 
