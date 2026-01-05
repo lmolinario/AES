@@ -200,7 +200,8 @@ Code snippet:
 
 ---
 
-### 🔹 **(3) Step 3 – FIR Timing (`lab3_step3_timing.c`)**
+### 🔹 **(3) Step 3 – FIR Execution-Time Analysis (`lab3_step3_timing.c`)**
+
 
 Analyzes computational cost using the Global Timer:
 
@@ -208,6 +209,8 @@ Analyzes computational cost using the Global Timer:
 * Cycles per tap
 * Maximum number of taps sustainable at 48 kHz
 * Comparison **cache ON vs cache OFF**
+
+All timing results are expressed in ARM Global Timer ticks (running at CPU/2 ≈ 333 MHz). CPU cycles can be obtained by multiplying by 2.
 
 Output Example:
 
@@ -218,7 +221,7 @@ Output Example:
 The FIR filter meets real-time requirements at **48 kHz** with a wide safety margin.
 With **caches enabled**, the execution time per sample is well below the available budget, allowing hundreds of taps in theory.
 With **caches disabled**, execution time increases significantly, but real-time operation remains feasible for kernels up to **~25–30 taps**, which covers the filters used in this lab.
-
+The available processing budget is approximately 6937 timer ticks per sample at 48 kHz.
 
 ---
 
