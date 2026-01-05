@@ -30,13 +30,14 @@ Each lab focuses on hands-on embedded programming for the **MicroBlaze soft-core
 
 ## Labs Summary
 
-| Lab       | Title                                     | Description                                                                                                                                                                                                                                                                      |
-|-----------|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Lab 1** | **Polling & Interrupts**                  | (a) `a_lab1_polling_basic.c` – polling version (read switches and mirror on LEDs) <br> (b) `b_lab1_interrupt_part1.c` – dual interrupt (SW + BTN) via AXI Interrupt Controller <br> (c) `c_lab1_interrupt_part2.c` – extended ISR: add Student ID digit (9) + invert pattern     |
-| **Lab 2** | **The PS - UART Microserver**             | (1) `main_negative.c` – receive PPM P6 image over UART → compute negative → send back processed image <br> (2) `main_hist_stretch.c` – linear histogram stretching with arbitrary image size <br> (3) `main_hist_equalization.c` – optional bonus: global histogram equalization |
-| **Lab 3** | **AD/DA conversion and audio processing** |   (1) `lab3_step1_loopback.c` – audio loopback using I2S and SSM2603 codec <br> (2) `lab3_step2_fir.c` – real-time software FIR filtering with selectable LPF/HPF variants <br> (3) `lab3_step3_timing.c` – FIR performance analysis using the Global Timer (cycles, taps, cache ON/OFF) |                                                                                                                                                                                                                                                                               |
-| **Lab 4** | **Parallel Processing**                   |                                                                                                                                                                                                                                                                                  |
-| **Lab 5** | **DNN on MNIST**                   |                                                                                                                                                                                                                                                                                  |
+| Lab       | Title                                     | Description                                                                                                                                                                                                                                                                            |
+|-----------|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Lab 1** | **Polling & Interrupts**                  | (a) `a_lab1_polling_basic.c` – polling version (read switches and mirror on LEDs) <br> (b) `b_lab1_interrupt_part1.c` – dual interrupt (SW + BTN) via AXI Interrupt Controller <br> (c) `c_lab1_interrupt_part2.c` – extended ISR: add Student ID digit (9) + invert pattern           |
+| **Lab 2** | **The PS - UART Microserver**             | (1) `main_negative.c` – receive PPM P6 image over UART → compute negative → send back processed image <br> (2) `main_hist_stretch.c` – linear histogram stretching with arbitrary image size <br> (3) `main_hist_equalization.c` – optional bonus: global histogram equalization       |
+| **Lab 3** | **AD/DA conversion and audio processing** | (1) `lab3_step1_loopback.c` – audio loopback using I2S and SSM2603 codec <br> (2) `lab3_step2_fir.c` – real-time software FIR filtering with selectable LPF/HPF variants <br> (3) `lab3_step3_timing.c` – FIR performance analysis using the Global Timer (cycles, taps, cache ON/OFF) |                                                                                                                                                                                                                                                                               |
+| **Lab 4** | **Parallel Processing**                   | `master.c` + `worker.c` + `shared.c` – bare-metal shared-memory parallel vector addition on dual-core ARM Cortex-A9 with Global Timer performance evaluation; serial baseline auto-vectorized with ARM NEON and verified via assembly inspection                                       |                                                                                                                                                                                                                                                                       |
+| **Lab 5** | **DNN on MNIST**                   |                                                                                                                                                                                                                                                                                        |
+
 
 
     |                            
@@ -69,9 +70,10 @@ AES Labs/
 │   └── README.md                  → Lab 3 documentation
 │
 ├── Lab 4/
-│   ├── main_XXXX.c
-│   ├── main_XXXX.c
-│   ├── main_XXXX.c
+│   ├── master.c                  → Core 0: serial baseline, parallel execution, timing
+│   ├── worker.c                  → Core 1: second-half vector computation
+│   ├── shared.h                  → Shared DDR data structures and synchronization flags
+│   ├── main.pdf                  → Experimental results
 │   ├── AES/                      → Full Xilinx SDK 2019.1 workspace
 │   └── README.md                 → Lab 4 documentation
 │
