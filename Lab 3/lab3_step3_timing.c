@@ -42,7 +42,7 @@
 * Cache-disabled tests can be performed using:
 *
 *    Xil_ICacheDisable();
-*     Xil_DCacheDisable();
+*    Xil_DCacheDisable();
 
 * to evaluate worst-case execution time.
 *
@@ -449,8 +449,8 @@ int main()
 	 * the ARM Cortex-A9 Global Timer. Only the lower 32 bits of the timer
 	 * counter are accessed, as required.
 	 *
-	 * The measurement is performed once, before starting the real-time
-	 * audio loop, to avoid any interference from I/O or control logic.
+	 * The measurement is performed offline, before starting the real-time
+     * audio loop, and averaged over multiple iterations to reduce jitter.
 	 *********************************************************************/
 
 	/* Enable Global Timer (enable + auto-increment) */
@@ -465,27 +465,68 @@ int main()
 	u32 t_start, t_end;
 	u32 fir_cycles;
 
-	/* Measure FIR execution time (example: LP basic) */
-	t_start = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
-	FIR_filter(timing_buffer, LP, N_LP);
-	t_end   = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+    #define FIR_MEAS_ITER 1000
 
-	fir_cycles = t_end - t_start;
+    u64 acc_cycles = 0;
+
+    /* Measure FIR execution time averaged over FIR_MEAS_ITER runs */
+    for (int i = 0; i < FIR_MEAS_ITER; i++) {
+        t_start = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+        FIR_filter(timing_buffer, LP, N_LP);
+        t_end   = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+
+        acc_cycles += (t_end - t_start);
+    }
+
+    fir_cycles = acc_cycles / FIR_MEAS_ITER;
+
 
 	/* Compute real-time budget */
 	u32 cycles_per_sample = GLOBAL_TMR_FREQ / FS_HZ;
-	u32 max_taps_rt = (cycles_per_sample * N_LP) / fir_cycles;
 
-	xil_printf("\n=== STEP 3 – FIR EXECUTION TIME ===\n\r");
-	xil_printf("FIR cycles (single call): %u\n\r", fir_cycles);
-	xil_printf("Cycles available per sample: %u\n\r", cycles_per_sample);
-	xil_printf("Estimated max FIR taps (RT): ~%u\n\r", max_taps_rt);
+    u32 cycles_per_tap = (fir_cycles / N_LP) + 1;
+    u32 max_taps_rt = cycles_per_sample / cycles_per_tap;
 
 
 
 
+    /* Cache ON */
+    xil_printf("=== CACHE ENABLED ===\n\r");
+    xil_printf("FIR cycles (avg over %d runs): %u\n\r", FIR_MEAS_ITER, fir_cycles);
+    xil_printf("Estimated cycles per tap: %u\n\r", cycles_per_tap);
+    xil_printf("Cycles available per sample: %u\n\r", cycles_per_sample);
+    xil_printf("Estimated max FIR taps (RT): ~%u\n\r", max_taps_rt);
 
-    xil_printf("\n=== LAB3 === Step 2: FIR Filtering ===\n\r");
+
+        /* ------------------------------------------------------------
+     * Cache-disabled measurement (worst-case execution time)
+     * ------------------------------------------------------------ */
+    Xil_ICacheDisable();
+    Xil_DCacheDisable();
+
+    acc_cycles = 0;
+
+    for (int i = 0; i < FIR_MEAS_ITER; i++) {
+        t_start = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+        FIR_filter(timing_buffer, LP, N_LP);
+        t_end   = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+
+        acc_cycles += (t_end - t_start);
+    }
+
+    u32 fir_cycles_nocache = acc_cycles / FIR_MEAS_ITER;
+    u32 cycles_per_tap_nocache = fir_cycles_nocache / N_LP;
+    u32 max_taps_rt_nocache = cycles_per_sample / cycles_per_tap_nocache;
+
+    /* Cache OFF */
+    xil_printf("\n=== CACHE DISABLED ===\n\r");
+    xil_printf("FIR cycles (cache OFF): %u\n\r", fir_cycles_nocache);
+    xil_printf("Estimated cycles per tap (cache OFF): %u\n\r", cycles_per_tap_nocache);
+    xil_printf("Cycles available per sample: %u\n\r", cycles_per_sample);
+    xil_printf("Estimated max FIR taps (RT, cache OFF): ~%u\n\r", max_taps_rt_nocache);
+
+
+
 
     xil_printf("\nFilter selection via board switches:\n\r");
 

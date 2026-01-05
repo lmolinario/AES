@@ -230,7 +230,8 @@ Code snippet:
 
 ### 🔹 **(3) Step 3 – FIR Execution-Time Analysis (`lab3_step3_timing.c`)**
 
-This step evaluates the computational cost of the software FIR filter using the **ARM Cortex-A9 Global Timer**.
+This step evaluates the computational cost of the software FIR filter using the
+**ARM Cortex-A9 Global Timer**.
 
 The following metrics are measured:
 
@@ -239,29 +240,65 @@ The following metrics are measured:
 * Estimated maximum number of FIR taps sustainable in real time
 * Impact of **CPU caches enabled vs disabled**
 
-All timing values are expressed in **Global Timer ticks**, running at **CPU/2 ≈ 333 MHz**
-(1 CPU cycle ≈ 0.5 timer ticks).
+All timing values are expressed in **Global Timer ticks**, running at
+**CPU/2 ≈ 333 MHz**.
 
 ---
 
-**Measured Results (Cache ON)**
+### **Measured Results (Cache Enabled)**
 
-* FIR execution time (single call): **511 timer ticks**
+* FIR execution time (single call): **≈ 333 timer ticks**
+* Estimated cycles per tap: **≈ 17**
 * Available budget per sample: **≈ 6937 timer ticks**
-* Estimated maximum FIR taps in real time: **~271 taps**
+* Estimated maximum FIR taps in real time: **~408 taps**
 
-These values confirm that the FIR kernels used in this lab (20–29 taps) are **well within real-time constraints**, with a large safety margin.
-
----
-
-**Cache Impact**
-
-With **caches enabled**, the FIR execution time is minimal and comfortably below the real-time budget.
-When **instruction and data caches are disabled**, execution time increases, providing a conservative estimate of worst-case performance. Even in this condition, real-time operation remains feasible for FIR filters with tens of taps, covering all filter configurations implemented in this lab.
+These results show that the FIR kernels used in this lab (20–29 taps) are
+**well within real-time constraints**, with a very large safety margin when
+CPU caches are enabled.
 
 ---
 
-Output Example:
+### **Cache Impact (Worst-Case Execution Time)**
+
+With **instruction and data caches disabled**, the measured execution time
+increases significantly:
+
+* FIR execution time (cache OFF): **≈ 6793 timer ticks**
+* Estimated cycles per tap (cache OFF): **≈ 339**
+* Estimated maximum FIR taps in real time (cache OFF): **~20 taps**
+
+This configuration represents a conservative **worst-case scenario**.
+Even under these conditions, all FIR filters implemented in this lab
+remain real-time compliant.
+
+---
+
+### **Conclusion**
+
+The execution-time analysis confirms that:
+
+* The FIR implementation comfortably satisfies real-time constraints at 48 kHz
+* CPU caches have a **major impact** on FIR performance
+* The selected filter lengths (20–29 taps) are safe in both cache-enabled
+  and cache-disabled scenarios
+
+---
+
+### Output Example
+
+```text
+=== CACHE ENABLED ===
+Estimated cycles per tap: 17
+FIR cycles (avg over 1000 runs): 333
+Cycles available per sample: 6937
+Estimated max FIR taps (RT): ~408
+
+=== CACHE DISABLED ===
+Cycles available per sample: 6937
+FIR cycles (cache OFF): 6793
+Estimated cycles per tap (cache OFF): 339
+Estimated max FIR taps (RT, cache OFF): ~20
+```
 
 <p align="center">
   <img src="../img/lab3/Lab3_step3.png" alt="FIR timing results via UART" width="650"/>
