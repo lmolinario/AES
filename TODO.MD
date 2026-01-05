@@ -1,10 +1,3 @@
- LAB 3 
----
-
-- RIVEDERE IL CODICE DEL LAB 3 :
-  -   step 2 implementare la parte dello in cui dice di usare prelimiarmente il testvector come test.
-  -  step 3 verificare il timer con Xil_In32(GLOBAL_TMR_BASEADDR) (senza offset), mentre Step 1 è “rigoroso” con + GTIMER_COUNTER_LOWER_OFFSET.
-
 LAB 4
 ---
 

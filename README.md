@@ -38,8 +38,8 @@ Each lab focuses on hands-on embedded programming for the **MicroBlaze soft-core
 | **Lab 4** | **Parallel Processing**                   |                                                                                                                                                                                                                                                                                  |
 | **Lab 5** | **DNN on MNIST**                   |                                                                                                                                                                                                                                                                                  |
 
----
 
+    |                            
 ##  Repository Structure
 
 ```
@@ -48,32 +48,32 @@ AES Labs/
 │── img/    → images
 │ 
 ├── Lab 1/
-│   ├── a_lab1_polling_basic.c
-│   ├── b_lab1_interrupt_part1.c
-│   ├── c_lab1_interrupt_part2.c
-│   ├── AES/                     → Full Xilinx SDK 2019.1 workspace
-│   └── README.md                → Lab 1 documentation
+│   ├── a_lab1_polling_basic.c      → polling version (read switches and mirror on LEDs)
+│   ├── b_lab1_interrupt_part1.c    → dual interrupt (SW + BTN) via AXI Interrupt Controller
+│   ├── c_lab1_interrupt_part2.c    → extended ISR: add Student ID digit (9) + invert pattern
+│   ├── AES/                        → Full Xilinx SDK 2019.1 workspace
+│   └── README.md                   → Lab 1 documentation
 │ 
 ├── Lab 2/
-│   ├── main_negative.c
-│   ├── main_hist_stretch.c
-│   ├── main_hist_equalization.c
-│   ├── AES/                     → Full Xilinx SDK 2019.1 workspace
-│   └── README.md                → Lab 2 documentation
+│   ├── main_negative.c            → compute negative 
+│   ├── main_hist_stretch.c        → linear histogram stretching with arbitrary image size 
+│   ├── main_hist_equalization.c   → global histogram equalization
+│   ├── AES/                       → Full Xilinx SDK 2019.1 workspace
+│   └── README.md                  → Lab 2 documentation
 │
 ├── Lab 3/
-│   ├── main_XXXX.c
-│   ├── main_XXXX.c
-│   ├── main_XXXX.c
-│   ├── AES/                     → Full Xilinx SDK 2019.1 workspace
-│   └── README.md                → Lab 3 documentation
+│   ├── lab3_step1_loopback.c      → audio loopback using I2S and SSM2603 codec
+│   ├── lab3_step2_fir.c           → real-time software FIR filtering with selectable LPF/HPF variants
+│   ├── lab3_step3_timing.c        → FIR performance analysis using the Global Timer (cycles, taps, cache ON/OFF) 
+│   ├── AES/                       → Full Xilinx SDK 2019.1 workspace
+│   └── README.md                  → Lab 3 documentation
 │
 ├── Lab 4/
 │   ├── main_XXXX.c
 │   ├── main_XXXX.c
 │   ├── main_XXXX.c
-│   ├── AES/                     → Full Xilinx SDK 2019.1 workspace
-│   └── README.md                → Lab 4 documentation
+│   ├── AES/                      → Full Xilinx SDK 2019.1 workspace
+│   └── README.md                 → Lab 4 documentation
 │
 ├── Lab 5/
 │   ├── main_XXXX.c
