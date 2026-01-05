@@ -245,7 +245,7 @@ All timing values are expressed in **Global Timer ticks**, running at
 
 ---
 
-### **Measured Results (Cache Enabled)**
+**Measured Results (Cache Enabled)**
 
 * FIR execution time (single call): **≈ 333 timer ticks**
 * Estimated cycles per tap: **≈ 17**
@@ -258,7 +258,7 @@ CPU caches are enabled.
 
 ---
 
-### **Cache Impact (Worst-Case Execution Time)**
+**Cache Impact (Worst-Case Execution Time)**
 
 With **instruction and data caches disabled**, the measured execution time
 increases significantly:
@@ -273,7 +273,7 @@ remain real-time compliant.
 
 ---
 
-### **Conclusion**
+ **Conclusion**
 
 The execution-time analysis confirms that:
 
@@ -285,20 +285,6 @@ The execution-time analysis confirms that:
 ---
 
 ### Output Example
-
-```text
-=== CACHE ENABLED ===
-Estimated cycles per tap: 17
-FIR cycles (avg over 1000 runs): 333
-Cycles available per sample: 6937
-Estimated max FIR taps (RT): ~408
-
-=== CACHE DISABLED ===
-Cycles available per sample: 6937
-FIR cycles (cache OFF): 6793
-Estimated cycles per tap (cache OFF): 339
-Estimated max FIR taps (RT, cache OFF): ~20
-```
 
 <p align="center">
   <img src="../img/lab3/Lab3_step3.png" alt="FIR timing results via UART" width="650"/>
