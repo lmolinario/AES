@@ -84,51 +84,79 @@ Lab 3/
 
 ## **Implementations Summary**
 
+
+
 ### 🔹 **(1) Step 1 – Loopback (`lab3_step1_loopback.c`)**
 
-Implements a raw passthrough of audio samples:
+Implements a raw real-time passthrough of audio samples:
 
-1. Initialize the codec (I2C)
-2. Configure I2S @ 48 kHz
-3. Read Left/Right samples from RX FIFO
-4. Immediately write them to TX FIFO (no processing)
+1. Initialize the SSM2603 audio codec via **I²C**
+2. Configure the AXI-I2S interface (nominal **48 kHz** sampling rate)
+3. Read interleaved **Left / Right** samples from the RX FIFO (blocking)
+4. Immediately forward samples to the TX FIFO (**no processing**)
+
+This step validates the complete audio chain:
+
+**ADC → I²S RX → CPU → I²S TX → DAC**
+
+---
 
 ### **Sampling Frequency Estimation**
 
-Using the Global Timer:
+The effective sampling frequency is measured using the **ARM Cortex-A9 Global Timer**, clocked at **CPU/2 = 333 MHz**.
+
+Only the **lower 32 bits** of the Global Timer counter are used:
 
 ```c
 u32 t = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
 ```
 
-The sampling frequency is computed as:
+To improve robustness and reduce jitter, the measurement is **averaged over N consecutive sampling periods**.
+
+The procedure is:
 
 ```
-delta_ticks = t[n+1] − t[n]
-Fs     = 333e6 / delta_ticks
+delta_ticks_avg = ( Σ ( t[n+1] − t[n] ) ) / N
+Fs = GLOBAL_TMR_FREQ / delta_ticks_avg
 ```
+
+where:
+
+* `GLOBAL_TMR_FREQ = 333 MHz`
+* `N = 100` samples
+
+UART output is performed **only after the measurement phase**, ensuring that serial I/O does not perturb the timing.
 
 ---
-Measured Output
 
+### **Measured Output**
+
+```
+Fs (avg over 100 samples) ~= 48040.22 Hz
+```
 
 <p align="center">
-  <img src="../img/lab3/Lab3_step1.png" alt="Photo taken during AES Lab" width="650"/>
+  <img src="../img/lab3/Lab3_step1.png" alt="Measured UART output" width="650"/>
 </p>
-<p align="center"><i>Measured Output: frequency is approximately 47.7 kHz </i></p>
-
-
-The measured value is slightly lower than the nominal 48 kHz due to:
-
-- Integer clock dividers
-
-- Asynchronous clock domains (PL vs PS)
-
-- Finite timer resolution
-
-The result confirms correct and stable audio subsystem configuration.
+<p align="center"><i>Measured sampling frequency using Global Timer (average over 100 samples)</i></p>
 
 ---
+
+### **Discussion**
+
+The measured sampling frequency is **very close to the nominal 48 kHz**, with a deviation of approximately **+0.08%**.
+
+This small discrepancy is expected and can be attributed to:
+
+* Integer clock dividers in the audio clocking chain
+* PLL and clock synthesis tolerances
+* Finite resolution of the Global Timer
+* Minor clock domain interactions between **PL (I²S)** and **PS (CPU)**
+
+The result confirms that the audio subsystem is **correctly configured, stable, and operating at the expected sampling rate**.
+
+---
+
 
 ### 🔹 **(2) Step 2 – FIR Audio Filtering (`lab3_step2_fir.c`)**
 
@@ -193,7 +221,7 @@ Code snippet:
 
 
 <p align="center">
-  <img src="../img/lab3/Lab3_step2_1.png" alt="Filter selection via board switches" width="650"/>
+  <img src="../img/lab3/Lab3_step2.png" alt="Filter selection via board switches" width="650"/>
 </p>
 <p align="center"><i>Filter selection via board switches</i></p>
 
@@ -236,7 +264,7 @@ When **instruction and data caches are disabled**, execution time increases, pro
 Output Example:
 
 <p align="center">
-  <img src="../img/lab3/Lab3_step2_3.png" alt="FIR timing results via UART" width="650"/>
+  <img src="../img/lab3/Lab3_step3.png" alt="FIR timing results via UART" width="650"/>
 </p>
 <p align="center"><i>UART output showing FIR execution-time measurement using the Global Timer</i></p>
 

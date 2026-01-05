@@ -188,7 +188,7 @@ float HP[]={coeffHP};
 
 #include "TestVector.h"
 #define TEST_LEN_250 (sizeof(test_input) / sizeof(test_input[0]))
-#define FIR_TESTVECTOR_MODE 1   // 1 = run self-test only, 0 = normal real-time
+#define FIR_TESTVECTOR_MODE 0   // 1 = run self-test only, 0 = normal real-time
 #define FIR_BUF_LEN 29   // max(N_LP_AGG=29, N_HP_AGG=25, N_HP=21, N_LP=20)
 
 
