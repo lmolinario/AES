@@ -202,26 +202,44 @@ Code snippet:
 
 ### 🔹 **(3) Step 3 – FIR Execution-Time Analysis (`lab3_step3_timing.c`)**
 
+This step evaluates the computational cost of the software FIR filter using the **ARM Cortex-A9 Global Timer**.
 
-Analyzes computational cost using the Global Timer:
+The following metrics are measured:
 
-* Cycles per FIR function call
-* Cycles per tap
-* Maximum number of taps sustainable at 48 kHz
-* Comparison **cache ON vs cache OFF**
+* Execution time of a single `FIR_filter()` call
+* Available processing budget per audio sample at **48 kHz**
+* Estimated maximum number of FIR taps sustainable in real time
+* Impact of **CPU caches enabled vs disabled**
 
-All timing results are expressed in ARM Global Timer ticks (running at CPU/2 ≈ 333 MHz). CPU cycles can be obtained by multiplying by 2.
+All timing values are expressed in **Global Timer ticks**, running at **CPU/2 ≈ 333 MHz**
+(1 CPU cycle ≈ 0.5 timer ticks).
+
+---
+
+**Measured Results (Cache ON)**
+
+* FIR execution time (single call): **511 timer ticks**
+* Available budget per sample: **≈ 6937 timer ticks**
+* Estimated maximum FIR taps in real time: **~271 taps**
+
+These values confirm that the FIR kernels used in this lab (20–29 taps) are **well within real-time constraints**, with a large safety margin.
+
+---
+
+**Cache Impact**
+
+With **caches enabled**, the FIR execution time is minimal and comfortably below the real-time budget.
+When **instruction and data caches are disabled**, execution time increases, providing a conservative estimate of worst-case performance. Even in this condition, real-time operation remains feasible for FIR filters with tens of taps, covering all filter configurations implemented in this lab.
+
+---
 
 Output Example:
 
-<p align="center"> <img src="../img/lab3/Lab3_step2_3.png" alt="FIR timing results via UART" width="650"/> </p> <p align="center"><i>UART output showing FIR execution-time analysis (cache ON / cache OFF)</i></p>
+<p align="center">
+  <img src="../img/lab3/Lab3_step2_3.png" alt="FIR timing results via UART" width="650"/>
+</p>
+<p align="center"><i>UART output showing FIR execution-time measurement using the Global Timer</i></p>
 
-**Result Summary**
-
-The FIR filter meets real-time requirements at **48 kHz** with a wide safety margin.
-With **caches enabled**, the execution time per sample is well below the available budget, allowing hundreds of taps in theory.
-With **caches disabled**, execution time increases significantly, but real-time operation remains feasible for kernels up to **~25–30 taps**, which covers the filters used in this lab.
-The available processing budget is approximately 6937 timer ticks per sample at 48 kHz.
 
 ---
 
