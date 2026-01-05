@@ -137,21 +137,69 @@
 #define FS_HZ         48000UL                   // audio sampling rate (approx)
 #define ITERATIONS    1000U
 
-/* Global Timer registers: lower/upper 32-bit */
+/* ============================================================
+ * Zynq PS Global Timer access
+ *
+ * The Global Timer is a 64-bit free-running cycle counter
+ * available in the Zynq Processing System (PS).
+ *
+ * According to the lab instructions, reading the lower 32 bits
+ * of the counter is sufficient for short measurements.
+ * In this implementation, a safe 64-bit read is used to avoid
+ * inconsistencies due to counter rollover during longer or
+ * repeated measurements.
+ *
+ * The Global Timer is clocked at half of the ARM CPU frequency
+ * (CPU = 667 MHz → Timer = 333.5 MHz).
+ * ============================================================ */
+
+/* Global Timer registers: lower and upper 32-bit parts */
 #define GTIMER_LO     (GLOBAL_TMR_BASEADDR + 0x00)
 #define GTIMER_HI     (GLOBAL_TMR_BASEADDR + 0x04)
 
-/* Safe 64-bit read (handles rollover between HI/LO reads) */
+/* ============================================================
+ * read_global_timer_64()
+ *
+ * Safely reads the 64-bit Global Timer value.
+ *
+ * Rationale:
+ * The timer is exposed as two 32-bit registers (HI and LO).
+ * Since the counter is continuously incrementing, reading
+ * the two parts independently may lead to an inconsistent
+ * value if the lower part overflows between reads.
+ *
+ * To prevent this issue, the upper register is read twice.
+ * If the two readings differ, a rollover occurred while
+ * reading the lower part, which is therefore read again.
+ *
+ * This approach guarantees a coherent 64-bit timestamp and
+ * does not alter the measurement principle described in the
+ * lab instructions.
+ *
+ * The returned value can be used to:
+ *  - verify the effective sampling frequency
+ *  - measure FIR execution time
+ *  - compute the number of cycles available per sample
+ * ============================================================ */
 static inline u64 read_global_timer_64(void)
 {
+    /* First read of the upper 32 bits */
     u32 hi1 = Xil_In32(GTIMER_HI);
+
+    /* Read of the lower 32 bits */
     u32 lo  = Xil_In32(GTIMER_LO);
+
+    /* Second read of the upper 32 bits */
     u32 hi2 = Xil_In32(GTIMER_HI);
 
-    if (hi2 != hi1) {              // rollover happened while reading LO
-        lo = Xil_In32(GTIMER_LO);  // re-read LO with stable HI
+    /* Detect rollover of the lower counter */
+    if (hi2 != hi1) {
+        /* Re-read lower part with stable upper bits */
+        lo  = Xil_In32(GTIMER_LO);
         hi1 = hi2;
     }
+
+    /* Combine upper and lower parts into a 64-bit value */
     return (((u64)hi1) << 32) | (u64)lo;
 }
 
