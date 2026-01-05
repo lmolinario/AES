@@ -177,9 +177,14 @@ The FIR implementation has been validated using the reference test vectors provi
 
   * zero-initialized buffer state (filter transient response)
   * floating-point to integer truncation effects
-* The overall filter response, stability, symmetry, and frequency behavior match the expected results for both low-pass and high-pass configurations
 
 The overall response, stability, and frequency behavior match the expected results.
+
+Code snippet:
+```c
+#define FIR_TESTVECTOR_MODE 1   // 1 = run self-test only, 0 = normal real-time
+
+```
 
 
 ---
@@ -229,12 +234,17 @@ With **caches disabled**, execution time increases significantly, but real-time 
 
 ## **Notes**
 
+
+
 * I2S RX/TX uses **blocking operations** for deterministic real-time behavior
 * FIR operates **in-place** for efficiency
 * Filter coefficients must match selected tap length
+* FIR buffers are dimensioned to the maximum tap count to safely support aggressive filters
 * Ensure buffers are reset at startup
 * UART debug prints must not occur inside timing-critical loops
 
 ---
+
+
 
 *Developed by Lello Molinario*

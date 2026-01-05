@@ -2,19 +2,20 @@
 <section name="Workbench">
 	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
 		<item value="false" key="isRegEx"/>
-		<item value="#define GLOBAL_TMR_BASEADDR XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR" key="selection"/>
+		<item value="for (int i = N_HP - 1; i &gt; 0; i--) {" key="selection"/>
 		<item value="false" key="casesensitive"/>
 		<item value="false" key="incremental"/>
 		<item value="true" key="wrap"/>
 		<item value="false" key="wholeword"/>
 		<list key="findhistory">
-			<item value="#define GLOBAL_TMR_BASEADDR XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR"/>
-			<item value="XPAR_AXI_FIFO_MM_S_0_BASEADDR"/>
-			<item value="global"/>
-			<item value="adi"/>
-			<item value="txsend"/>
-			<item value="inten"/>
-			<item value="fifo"/>
+			<item value="for (int i = N_HP - 1; i &gt; 0; i--) {"/>
+			<item value="int bufferL[N_HP], bufferR[N_HP];"/>
+			<item value="int main()"/>
+			<item value="#include &quot;TestVector.h&quot;"/>
+			<item value="return (int)acc;"/>
+			<item value="Low-Pass"/>
+			<item value="xil_printf(&quot;\n===FIR SELF-TEST (LP, 250 Hz) ===n\r&quot;);"/>
+			<item value="/***************************************************************"/>
 		</list>
 		<list key="replacehistory">
 		</list>

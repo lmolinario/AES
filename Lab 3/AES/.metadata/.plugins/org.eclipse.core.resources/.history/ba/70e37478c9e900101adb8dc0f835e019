@@ -1,62 +1,62 @@
 /***************************************************************
-
-* **Lab 3 – FIR Execution-Time Analysis (Step 3)**
-* Author: Lello Molinario
-* University of Cagliari – Advanced Embedded Systems (AES)
-* Student ID: 70/90/000369
-* Date: November 2025
-*
-* Description
-*  ------------------------------------------------------------
-* Execution-time evaluation of the software FIR filter running
-* on the ARM Cortex-A9 subsystem of the Zybo Z7 platform.
-* This step extends the FIR implementation developed in Step 2
-* by introducing precise cycle-level timing measurements for
-* the filter routine, allowing assessment of real-time
-* feasibility under the constraints of audio streaming.
-*
-* The goal of STEP 3 is to:
-* • measure the execution time of FIR_filter()
-* • determine cycles available per sample (given Fs ≈ 48 kHz)
-* • estimate the maximum number of FIR taps executable in real time without violating the sampling period
-* • compare performance with CPU caches enabled vs disabled
-* • ensure that filtering keeps up with the I²S data rate
-*
-* Timing Measurement
-*  ------------------------------------------------------------
-* Timing is performed using the ARM Global Timer, a 64-bit
-* counter clocked at:
-*       CPU_Freq / 2  ≈ 333 MHz
-*
-* The Global Timer is read as a 64-bit value by combining
-* the lower and upper registers, ensuring correctness
-* across potential counter rollovers during measurement.
-*
-* Measurement procedure:
-* 1. read timer → t_start
-* 2. execute FIR_filter() repeatedly (e.g., 1000 iterations)
-* 3. read timer → t_end
-* 4. compute Δ = t_end − t_start
-* 5. compute cycles_per_call = Δ / iterations
-*
-* Cache-disabled tests are performed using:
-*
-*     Xil_ICacheDisable();
-*
-*     Xil_DCacheDisable();
-*
-* A comparison between cached vs non-cached performance
-* provides insight into worst-case execution time.
-*
-* Real-Time Constraint
-*  ------------------------------------------------------------
-* With Fs ≈ 48 kHz, the available processing time per sample is:
-*
-*     cycles_per_sample = (333 MHz / 48000) ≈ 6937 cycles
-*
-* This upper bound determines the maximum FIR complexity
-* sustainable in real-time audio processing.
-*
+ *  Lab 3 – FIR Audio Filtering (Step 2)
+ *  Author: Lello Molinario
+ *  University of Cagliari – Advanced Embedded Systems (AES)
+ *  Student ID: 70/90/000369
+ *  Date: November 2025
+ *
+ *  Description
+ *  ------------------------------------------------------------
+ *  Real-time FIR audio filtering implemented in software on the
+ *  Zybo Z7 platform. The program acquires stereo audio samples
+ *  (Left + Right) from the SSM2603 codec via AXI-I2S, stores
+ *  them in a sliding window, and applies a configurable FIR
+ *  convolution before sending the filtered samples back to the
+ *  output FIFO.
+ *
+ *  The goal of STEP 2 is to:
+ *    • implement a generic FIR filter function
+ *    • apply convolution over a sliding window of past samples
+ *    • allow selection of the filtering mode via board switches
+ *    • support both Low-Pass (LP) and High-Pass (HP) filters
+ *    • preserve clean passthrough audio when no filter is selected
+ *
+ *  FIR Filtering
+ *  ------------------------------------------------------------
+ *  The filtering operation is implemented as a standard FIR:
+ *
+ *        y[n] = h0·x[n] + h1·x[n−1] + … + hN·x[n−N]
+ *
+ *  where:
+ *     • x[n]   = current input sample
+ *     • h[k]   = FIR coefficients (filter kernel)
+ *     • N      = number of taps (LP or HP)
+ *
+ *  A sliding buffer stores the latest N input samples, updated
+ *  each iteration by shifting the window and inserting x[n] at
+ *  index 0. A flexible FIR function computes the convolution
+ *  for any tap size, enabling easy testing of alternative
+ *  kernels or more aggressive filter shapes.
+ *
+ *  Filter Selection (Using Switches)
+ *  ------------------------------------------------------------
+ *    SW0 = 1  → enable Low-Pass filter (LP)
+ *    SW1 = 1  → enable High-Pass filter (HP)
+ *    SW2 = 1  → enable Low-Pass (aggressive) filter
+ *    SW3 = 1  → enable High-Pass (aggressive) filter
+ *    Otherwise → raw audio passthrough (clean)
+ *
+ *  Notes on Filter Behavior
+ *  ------------------------------------------------------------
+ *  • Only one filter should be active at a time; priority follows
+ *    the order SW0 → SW1 → SW2 → SW3.
+ *  • Aggressive filters use extended kernels (higher tap count),
+ *    giving steeper roll-off.
+ *  • Clean passthrough preserves the original audio stream.
+ *  • External tone generators (e.g. szynalski.com/tone-generator)
+ *    can be used to validate the filter response in real time.
+ *
+ *
  *  Platform
  *  ------------------------------------------------------------
  *   • Board: Zybo Z7 (Zynq-7000)
@@ -79,11 +79,6 @@
 #include <time.h>
 #include <stdlib.h>
 #include <math.h>
-#include "xil_cache.h"   //Cache control (enable/disable) for timing analysis
-
-
-
-
 
 
 /* I2S Register offsets */
@@ -127,33 +122,11 @@
 
 #define FIR_FIFO XPAR_AXI_FIFO_MM_S_1_BASEADDR
 #define GLOBAL_TMR_BASEADDR XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
+
+
 /* ------------------------------------------------------------ */
-/*				Low-Pass and High-Pass FIR filter coefficients									*/
+/*				Low-Pass and High-Pass FIR filter coefficients
 /* ------------------------------------------------------------ */
-
-
-#define CPU_HZ        666000000UL               // Cortex-A9 nominal (Zybo Z7)
-#define GTIMER_HZ     (CPU_HZ / 2UL)            // Global Timer runs at CPU/2 ≈ 333 MHz
-#define FS_HZ         48000UL                   // audio sampling rate (approx)
-#define ITERATIONS    1000U
-
-/* Global Timer registers: lower/upper 32-bit */
-#define GTIMER_LO     (GLOBAL_TMR_BASEADDR + 0x00)
-#define GTIMER_HI     (GLOBAL_TMR_BASEADDR + 0x04)
-
-/* Safe 64-bit read (handles rollover between HI/LO reads) */
-static inline u64 read_global_timer_64(void)
-{
-    u32 hi1 = Xil_In32(GTIMER_HI);
-    u32 lo  = Xil_In32(GTIMER_LO);
-    u32 hi2 = Xil_In32(GTIMER_HI);
-
-    if (hi2 != hi1) {              // rollover happened while reading LO
-        lo = Xil_In32(GTIMER_LO);  // re-read LO with stable HI
-        hi1 = hi2;
-    }
-    return (((u64)hi1) << 32) | (u64)lo;
-}
 
 #define coeffLP -1.692219e-02, 5.043750e-02,3.935835e-02,4.341238e-02,5.137933e-02,5.982048e-02,6.748827e-02, 7.379049e-02, 7.824605e-02, 8.052560e-02,8.052560e-02, 7.824605e-02, 7.379049e-02, 6.748827e-02,5.982048e-02,5.137933e-02,4.341238e-02,3.935835e-02,5.043750e-02,-0.0169221860
 #define coeffHP -3.942071e-02,-5.929114e-03,1.430997e-02,4.069053e-02,5.762197e-02,4.843584e-02,4.349633e-03,-6.932913e-02,-1.527862e-01,-2.187328e-01,7.562085e-01,-2.187328e-01,-1.527862e-01,-6.932913e-02,4.349633e-03,4.843584e-02,5.762197e-02,4.069053e-02,1.430997e-02,-5.929114e-03,-0.0394207089
@@ -196,7 +169,7 @@ float HP[]={coeffHP};
 
 #include "TestVector.h"
 #define TEST_LEN_250 (sizeof(test_input) / sizeof(test_input[0]))
-#define FIR_TESTVECTOR_MODE 1   // 1 = run self-test only, 0 = normal real-time
+#define FIR_TESTVECTOR_MODE 0   // 1 = run self-test only, 0 = normal real-time
 #define FIR_BUF_LEN 29   // max(N_LP_AGG=29, N_HP_AGG=25, N_HP=21, N_LP=20)
 
 
@@ -362,9 +335,12 @@ void initialize_FIFO(u32 fifoAddr){
 	    Xil_Out32(fifoAddr + FIFO_TDR, 0x00000000);
 		Xil_Out32(fifoAddr + FIFO_ISR, 0xFFFFFFFF);
 	    Xil_Out32(fifoAddr + FIFO_IER, 0x04100000);
-		Xil_Out32(fifoAddr + FIFO_ISR, 0x00100000);
+	    Xil_Out32(fifoAddr + FIFO_ISR, 0x00100000);
+
+
 
 }
+
 
 
 // GENERIC FIR FILTER: y[n] = sum_{k=0}^{taps-1} h[k] * x[n-k]
@@ -385,10 +361,12 @@ int FIR_filter(int *buffer, float *coeff, int taps)
         acc += coeff[k] * (float)buffer[k];
     }
 
+
     /* Return the filtered sample as an integer.
      * The output of the FIR is floating-point, but audio samples
      * are represented as integers in the I²S data path.
      */
+
     return (int)acc;
 
 }
@@ -439,7 +417,6 @@ void FIR_selftest_HP(void) //from TestVector.h
 
 int main()
 {
-    /* Initialize BSP components: UART, caches, stdout redirection, etc. */
     init_platform();
     /* Initialize the underlying BSP (UART, caches, stdout redirection, etc.)
      * This is required before any I/O or platform-specific operations. */
@@ -452,163 +429,50 @@ int main()
 		while (1);           // stop here: validation only
 	#endif
 
-    print("Started!\n\r");
-    xil_printf("\n=== LAB3  === Step 3: FIR Execution-Time Analysis ===\n\r");
 
 
+    print("\nStarted!\n\r");
 
+    xil_printf("\n=== LAB3 === Step 2: FIR Filtering ===\n\r");
 
+    xil_printf("\nFilter selection via board switches:\n\r");
+
+    xil_printf("\n  SW0 = 1	Low-Pass filter  (basic kernel)\n\r");
+    xil_printf("\n  SW1 = 1	High-Pass filter (basic kernel)\n\r");
+    xil_printf("\n  SW2 = 1	Low-Pass filter  (aggressive kernel)\n\r");
+    xil_printf("\n  SW3 = 1	High-Pass filter (aggressive kernel)\n\r");
+    xil_printf("\n  No switches ON = raw audio passthrough\n");
+    xil_printf(" \n\n");
 
 
     /* Initialize the audio subsystem:
-     *  - configure SSM2603 via I²C
-     *  - configure I²S clocks and FIFO logic
-     *  - enable RX/TX audio streaming
+     *  - configure the SSM2603 codec via I²C
+     *  - set up I²S clocking and FIFO control registers
+     *  - enable RX/TX streaming
      */
     AudioInitialize(SCU_TIMER_ID, AUDIO_IIC_ID, AUDIO_CTRL_BASEADDR);
 
-    /* Initialize the AXI FIFOs.
-     * AUDIO_FIFO is used for streaming samples to/from the I²S interface.
-     * FIR_FIFO is included for completeness (used in Step 4 – HW FIR), but
-     * not required for software timing measurements.
+    /* Initialize both AXI FIFOs:
+     *  - AUDIO_FIFO handles samples coming from / going to the I²S interface
+     * The initialization sequence clears pending flags and configures control bits.
      */
 
     initialize_FIFO(AUDIO_FIFO);
 
+    int SampleL, SampleR; // temporary storage for incoming stereo samples
 
-/**************************************************************
- * STEP 3 – Global Timer measurement for FIR execution time
- **************************************************************/
-
-volatile int dummy = 0;  // prevents optimization
-u64 t_start, t_end;
-u32 k;
-
-/* Deterministic input buffer for timing */
-int test_buffer[FIR_BUF_LEN];
-for (k = 0; k < FIR_BUF_LEN; k++)
-    test_buffer[k] = (int)(k * 7);
-
-
-/* Warm-up (cache/pipeline stabilization) */
-for (k = 0; k < 200; k++)
-    dummy = FIR_filter(test_buffer, HP, N_HP);
-
-/* Real-time budget per sample in GlobalTimer ticks */
-const double ticks_budget = (double)GTIMER_HZ / (double)FS_HZ;   // ≈ 6937 ticks/sample
-
-/* Measure */
-/* -------- CACHE ON -------- */
-
-t_start = read_global_timer_64();
-for (k = 0; k < ITERATIONS; k++)
-    dummy = FIR_filter(test_buffer, HP, N_HP);
-
-t_end = read_global_timer_64();
-
-u64 total_ticks_on = t_end - t_start;
-
-double ticks_call_on = (double)total_ticks_on / ITERATIONS;
-double ticks_tap_on  = ticks_call_on / N_HP;
-double max_taps_on   = ticks_budget / ticks_tap_on;
-
-/* fixed-point for xil_printf */
-int ticks_call_on_fp = (int)(ticks_call_on * 100);
-int ticks_tap_on_fp  = (int)(ticks_tap_on  * 100);
-int budget_fp        = (int)(ticks_budget  * 100);
-int margin_on_fp     = (int)((ticks_budget - ticks_call_on) * 100);
-int max_taps_on_i    = (int)(max_taps_on);
-
-xil_printf("\n=== FIR TIMING (CACHE ON) ===\n\r");
-xil_printf("total ticks       = %llu\n\r", total_ticks_on);
-xil_printf("ticks/call (x100) = %d\n\r", ticks_call_on_fp);
-xil_printf("ticks/tap  (x100) = %d\n\r", ticks_tap_on_fp);
-xil_printf("budget     (x100) = %d\n\r", budget_fp);
-xil_printf("margin     (x100) = %d\n\r", margin_on_fp);
-xil_printf("max taps          = %d\n\r", max_taps_on_i);
-
-
-
-/**************************************************************
- * Cache OFF (worst-case-ish)
- **************************************************************/
-Xil_DCacheDisable();
-Xil_ICacheDisable();
-
-/* warm-up */
-for (k = 0; k < 200; k++)
-    dummy = FIR_filter(test_buffer, HP, N_HP);
-
-/* measure */
-t_start = read_global_timer_64();
-for (k = 0; k < ITERATIONS; k++)
-    dummy = FIR_filter(test_buffer, HP, N_HP);
-t_end = read_global_timer_64();
-
-u64 total_ticks_off = t_end - t_start;
-
-double ticks_call_off = (double)total_ticks_off / ITERATIONS;
-double ticks_tap_off  = ticks_call_off / N_HP;
-double max_taps_off   = ticks_budget / ticks_tap_off;
-
-/* fixed-point */
-int ticks_call_off_fp = (int)(ticks_call_off * 100);
-int ticks_tap_off_fp  = (int)(ticks_tap_off  * 100);
-int margin_off_fp     = (int)((ticks_budget - ticks_call_off) * 100);
-int max_taps_off_i    = (int)(max_taps_off);
-
-xil_printf("\n=== FIR TIMING (CACHE OFF) ===\n\r");
-xil_printf("total ticks       = %llu\n\r", total_ticks_off);
-xil_printf("ticks/call (x100) = %d\n\r", ticks_call_off_fp);
-xil_printf("ticks/tap  (x100) = %d\n\r", ticks_tap_off_fp);
-xil_printf("margin     (x100) = %d\n\r", margin_off_fp);
-xil_printf("max taps          = %d\n\r", max_taps_off_i);
-
-
-
-
-/* Re-enable caches */
-Xil_ICacheEnable();
-Xil_DCacheEnable();
-
-xil_printf("\nTIMING DONE – starting audio streaming...\n\r");
-
-    /* -----------------------------------------------------------
-     *   REAL-TIME STREAMING WITH SOFTWARE FIR (as in Step 2)
-     * -----------------------------------------------------------
-     */
-
-	xil_printf("\nFilter selection via board switches:\n\r");
-
-	xil_printf("\n  SW0 = 1	Low-Pass filter  (basic kernel)\n\r");
-	xil_printf("\n  SW1 = 1	High-Pass filter (basic kernel)\n\r");
-	xil_printf("\n  SW2 = 1	Low-Pass filter  (aggressive kernel)\n\r");
-	xil_printf("\n  SW3 = 1	High-Pass filter (aggressive kernel)\n\r");
-	xil_printf("\n  No switches ON = raw audio passthrough\n");
-xil_printf(" \n\n");
-    int SampleL, SampleR;
-
-
-    /* Sliding-window buffers for FIR convolution.
-     * Use the maximum required window size (FIR_BUF_LEN)
-     * to safely support all FIR configurations.
-     */
-
+    // FIR sliding-window buffers (use the largest size: N_HP)
     int bufferL[FIR_BUF_LEN], bufferR[FIR_BUF_LEN];
 
 
-    /* Initialize convolution buffers to zero */
-    for (int i = 0; i < FIR_BUF_LEN; i++) {
+    // Initialize buffers to zero (cold start of the convolution state)
+    for (int i = 0; i < N_HP; i++) {
         bufferL[i] = 0;
         bufferR[i] = 0;
     }
 
-
     while (1) {
 
-        /* -------------------------------
-         *  SAMPLE ACQUISITION (I²S RX)
-         * ------------------------------- */
         /* -----------------------------
          *      SAMPLE ACQUISITION
          * -----------------------------
@@ -618,9 +482,6 @@ xil_printf(" \n\n");
         SampleL = (int) I2SFifoRead(AUDIO_FIFO);
         SampleR = (int) I2SFifoRead(AUDIO_FIFO);
 
-        /* -------------------------------
-         *  UPDATE SLIDING WINDOW
-         * ------------------------------- */
         /* -----------------------------
          *     SLIDING WINDOW UPDATE
          * -----------------------------
@@ -635,16 +496,14 @@ xil_printf(" \n\n");
          *   ...
          *   buffer[N_HP-1] = x[n-(N_HP-1)]
          */
-        for (int i = FIR_BUF_LEN - 1; i > 0; i--){
+        for (int i = FIR_BUF_LEN - 1; i > 0; i--) {
             bufferL[i] = bufferL[i - 1];
             bufferR[i] = bufferR[i - 1];
         }
+
         bufferL[0] = SampleL;
         bufferR[0] = SampleR;
 
-        /* -------------------------------
-         *  FILTER SELECTION VIA SWITCHES
-         * ------------------------------- */
         /* -----------------------------
          *       FILTER SELECTION
          * -----------------------------
@@ -660,12 +519,12 @@ xil_printf(" \n\n");
         int outL, outR;
 
         if (sw & 0x1) {
-            /* SW0 ON → Low-Pass filter */
+            // SW0 → Low-Pass (base)
             outL = FIR_filter(bufferL, LP, N_LP);
             outR = FIR_filter(bufferR, LP, N_LP);
         }
         else if (sw & 0x2) {
-            /* SW1 ON → High-Pass filter */
+            // SW1 → High-Pass (base)
             outL = FIR_filter(bufferL, HP, N_HP);
             outR = FIR_filter(bufferR, HP, N_HP);
         }
@@ -680,14 +539,11 @@ xil_printf(" \n\n");
             outR = FIR_filter(bufferR, HP_AGG, N_HP_AGG);
         }
         else {
-            /* No filter selected → raw passthrough */
+            // No filter → clean passthrough
             outL = SampleL;
             outR = SampleR;
         }
 
-        /* -------------------------------
-         *  OUTPUT TO I²S TX
-         * ------------------------------- */
 
         /* -----------------------------
          *          OUTPUT STAGE

@@ -813,3 +813,300 @@ make pre-build main-build
 a9-linaro-pre-build-step
 ' '
 make: Nothing to be done for 'main-build'.
+00:55:26 **** Incremental Build of configuration Debug for project lab3_step1_loopback ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:55:27 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+'Building file: ../src/lab3_step2_fir_filter.c'
+'Invoking: ARM v7 gcc compiler'
+arm-none-eabi-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/lab3_step2_fir_filter.o" -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -I../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/include -MMD -MP -MF"src/lab3_step2_fir_filter.d" -MT"src/lab3_step2_fir_filter.o" -o "src/lab3_step2_fir_filter.o" "../src/lab3_step2_fir_filter.c"
+../src/lab3_step2_fir_filter.c:129:1: warning: "/*" within comment [-Wcomment]
+ /* ------------------------------------------------------------ */
+  
+'Finished building: ../src/lab3_step2_fir_filter.c'
+' '
+'Building target: lab3_step2_fir_filter.elf'
+'Invoking: ARM v7 gcc linker'
+arm-none-eabi-gcc -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -Wl,-build-id=none -specs=Xilinx.spec -Wl,-T -Wl,../src/lscript.ld -L../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/lib -o "lab3_step2_fir_filter.elf"  ./src/lab3_step2_fir_filter.o ./src/platform.o ./src/timer_ps.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: lab3_step2_fir_filter.elf'
+' '
+'Invoking: ARM v7 Print Size'
+arm-none-eabi-size lab3_step2_fir_filter.elf  |tee "lab3_step2_fir_filter.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+  39860	   4344	  23352	  67556	  107e4	lab3_step2_fir_filter.elf
+'Finished building: lab3_step2_fir_filter.elf.size'
+' '
+00:55:28 **** Incremental Build of configuration Debug for project lab3_step3_fir_timing ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:55:29 **** Incremental Build of configuration Debug for project test_adi ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:56:08 **** Incremental Build of configuration Debug for project lab3_step1_loopback ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:56:08 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+'Building file: ../src/lab3_step2_fir_filter.c'
+'Invoking: ARM v7 gcc compiler'
+arm-none-eabi-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/lab3_step2_fir_filter.o" -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -I../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/include -MMD -MP -MF"src/lab3_step2_fir_filter.d" -MT"src/lab3_step2_fir_filter.o" -o "src/lab3_step2_fir_filter.o" "../src/lab3_step2_fir_filter.c"
+../src/lab3_step2_fir_filter.c:129:1: warning: "/*" within comment [-Wcomment]
+ /* ------------------------------------------------------------ */
+  
+'Finished building: ../src/lab3_step2_fir_filter.c'
+' '
+'Building target: lab3_step2_fir_filter.elf'
+'Invoking: ARM v7 gcc linker'
+arm-none-eabi-gcc -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -Wl,-build-id=none -specs=Xilinx.spec -Wl,-T -Wl,../src/lscript.ld -L../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/lib -o "lab3_step2_fir_filter.elf"  ./src/lab3_step2_fir_filter.o ./src/platform.o ./src/timer_ps.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: lab3_step2_fir_filter.elf'
+' '
+'Invoking: ARM v7 Print Size'
+arm-none-eabi-size lab3_step2_fir_filter.elf  |tee "lab3_step2_fir_filter.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+  38712	   4344	  23352	  66408	  10368	lab3_step2_fir_filter.elf
+'Finished building: lab3_step2_fir_filter.elf.size'
+' '
+00:56:10 **** Incremental Build of configuration Debug for project lab3_step3_fir_timing ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:56:10 **** Incremental Build of configuration Debug for project test_adi ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:56:39 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:57:08 **** Incremental Build of configuration Debug for project lab3_step1_loopback ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:57:09 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+'Building file: ../src/lab3_step2_fir_filter.c'
+'Invoking: ARM v7 gcc compiler'
+arm-none-eabi-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/lab3_step2_fir_filter.o" -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -I../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/include -MMD -MP -MF"src/lab3_step2_fir_filter.d" -MT"src/lab3_step2_fir_filter.o" -o "src/lab3_step2_fir_filter.o" "../src/lab3_step2_fir_filter.c"
+../src/lab3_step2_fir_filter.c:129:1: warning: "/*" within comment [-Wcomment]
+ /* ------------------------------------------------------------ */
+  
+'Finished building: ../src/lab3_step2_fir_filter.c'
+' '
+'Building target: lab3_step2_fir_filter.elf'
+'Invoking: ARM v7 gcc linker'
+arm-none-eabi-gcc -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -Wl,-build-id=none -specs=Xilinx.spec -Wl,-T -Wl,../src/lscript.ld -L../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/lib -o "lab3_step2_fir_filter.elf"  ./src/lab3_step2_fir_filter.o ./src/platform.o ./src/timer_ps.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: lab3_step2_fir_filter.elf'
+' '
+'Invoking: ARM v7 Print Size'
+arm-none-eabi-size lab3_step2_fir_filter.elf  |tee "lab3_step2_fir_filter.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+  39860	   4344	  23352	  67556	  107e4	lab3_step2_fir_filter.elf
+'Finished building: lab3_step2_fir_filter.elf.size'
+' '
+00:57:10 **** Incremental Build of configuration Debug for project lab3_step3_fir_timing ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:57:11 **** Incremental Build of configuration Debug for project test_adi ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:57:17 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:59:00 **** Incremental Build of configuration Debug for project lab3_step1_loopback ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:59:00 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+'Building file: ../src/lab3_step2_fir_filter.c'
+'Invoking: ARM v7 gcc compiler'
+arm-none-eabi-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/lab3_step2_fir_filter.o" -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -I../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/include -MMD -MP -MF"src/lab3_step2_fir_filter.d" -MT"src/lab3_step2_fir_filter.o" -o "src/lab3_step2_fir_filter.o" "../src/lab3_step2_fir_filter.c"
+../src/lab3_step2_fir_filter.c:129:1: warning: "/*" within comment [-Wcomment]
+ /* ------------------------------------------------------------ */
+  
+'Finished building: ../src/lab3_step2_fir_filter.c'
+' '
+'Building target: lab3_step2_fir_filter.elf'
+'Invoking: ARM v7 gcc linker'
+arm-none-eabi-gcc -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -Wl,-build-id=none -specs=Xilinx.spec -Wl,-T -Wl,../src/lscript.ld -L../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/lib -o "lab3_step2_fir_filter.elf"  ./src/lab3_step2_fir_filter.o ./src/platform.o ./src/timer_ps.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: lab3_step2_fir_filter.elf'
+' '
+'Invoking: ARM v7 Print Size'
+arm-none-eabi-size lab3_step2_fir_filter.elf  |tee "lab3_step2_fir_filter.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+  39860	   4344	  23352	  67556	  107e4	lab3_step2_fir_filter.elf
+'Finished building: lab3_step2_fir_filter.elf.size'
+' '
+00:59:01 **** Incremental Build of configuration Debug for project lab3_step3_fir_timing ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:59:02 **** Incremental Build of configuration Debug for project test_adi ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:59:23 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:59:56 **** Incremental Build of configuration Debug for project lab3_step1_loopback ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:59:57 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+'Building file: ../src/lab3_step2_fir_filter.c'
+'Invoking: ARM v7 gcc compiler'
+arm-none-eabi-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/lab3_step2_fir_filter.o" -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -I../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/include -MMD -MP -MF"src/lab3_step2_fir_filter.d" -MT"src/lab3_step2_fir_filter.o" -o "src/lab3_step2_fir_filter.o" "../src/lab3_step2_fir_filter.c"
+../src/lab3_step2_fir_filter.c:129:1: warning: "/*" within comment [-Wcomment]
+ /* ------------------------------------------------------------ */
+  
+'Finished building: ../src/lab3_step2_fir_filter.c'
+' '
+'Building target: lab3_step2_fir_filter.elf'
+'Invoking: ARM v7 gcc linker'
+arm-none-eabi-gcc -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -Wl,-build-id=none -specs=Xilinx.spec -Wl,-T -Wl,../src/lscript.ld -L../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/lib -o "lab3_step2_fir_filter.elf"  ./src/lab3_step2_fir_filter.o ./src/platform.o ./src/timer_ps.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: lab3_step2_fir_filter.elf'
+' '
+'Invoking: ARM v7 Print Size'
+arm-none-eabi-size lab3_step2_fir_filter.elf  |tee "lab3_step2_fir_filter.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+  38712	   4344	  23352	  66408	  10368	lab3_step2_fir_filter.elf
+'Finished building: lab3_step2_fir_filter.elf.size'
+' '
+00:59:58 **** Incremental Build of configuration Debug for project lab3_step3_fir_timing ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+00:59:59 **** Incremental Build of configuration Debug for project test_adi ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+01:00:08 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+01:13:45 **** Auto Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+'Building file: ../src/lab3_step2_fir_filter.c'
+'Invoking: ARM v7 gcc compiler'
+arm-none-eabi-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/lab3_step2_fir_filter.o" -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -I../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/include -MMD -MP -MF"src/lab3_step2_fir_filter.d" -MT"src/lab3_step2_fir_filter.o" -o "src/lab3_step2_fir_filter.o" "../src/lab3_step2_fir_filter.c"
+../src/lab3_step2_fir_filter.c:148:1: warning: "/*" within comment [-Wcomment]
+ /* ------------------------------------------------------------ */
+  
+'Finished building: ../src/lab3_step2_fir_filter.c'
+' '
+'Building target: lab3_step2_fir_filter.elf'
+'Invoking: ARM v7 gcc linker'
+arm-none-eabi-gcc -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -Wl,-build-id=none -specs=Xilinx.spec -Wl,-T -Wl,../src/lscript.ld -L../../lab3_step2_fir_filter_bsp/ps7_cortexa9_0/lib -o "lab3_step2_fir_filter.elf"  ./src/lab3_step2_fir_filter.o ./src/platform.o ./src/timer_ps.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: lab3_step2_fir_filter.elf'
+' '
+'Invoking: ARM v7 Print Size'
+arm-none-eabi-size lab3_step2_fir_filter.elf  |tee "lab3_step2_fir_filter.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+  38712	   4344	  23352	  66408	  10368	lab3_step2_fir_filter.elf
+'Finished building: lab3_step2_fir_filter.elf.size'
+' '
+01:13:46 **** Incremental Build of configuration Debug for project lab3_step1_loopback ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+01:13:47 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+01:13:48 **** Incremental Build of configuration Debug for project lab3_step3_fir_timing ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+01:13:48 **** Incremental Build of configuration Debug for project test_adi ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+01:14:07 **** Auto Build of configuration Debug for project lab3_step3_fir_timing ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+'Building file: ../src/lab3_step3_fir_timing.c'
+'Invoking: ARM v7 gcc compiler'
+arm-none-eabi-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/lab3_step3_fir_timing.o" -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -I../../lab3_step3_fir_timing_bsp/ps7_cortexa9_0/include -MMD -MP -MF"src/lab3_step3_fir_timing.d" -MT"src/lab3_step3_fir_timing.o" -o "src/lab3_step3_fir_timing.o" "../src/lab3_step3_fir_timing.c"
+../src/lab3_step3_fir_timing.c: In function 'main':
+../src/lab3_step3_fir_timing.c:483:14: warning: variable 'dummy' set but not used [-Wunused-but-set-variable]
+ volatile int dummy = 0;  // prevents optimization
+              ^~~~~
+'Finished building: ../src/lab3_step3_fir_timing.c'
+' '
+'Building target: lab3_step3_fir_timing.elf'
+'Invoking: ARM v7 gcc linker'
+arm-none-eabi-gcc -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -Wl,-build-id=none -specs=Xilinx.spec -Wl,-T -Wl,../src/lscript.ld -L../../lab3_step3_fir_timing_bsp/ps7_cortexa9_0/lib -o "lab3_step3_fir_timing.elf"  ./src/lab3_step3_fir_timing.o ./src/platform.o ./src/timer_ps.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: lab3_step3_fir_timing.elf'
+' '
+'Invoking: ARM v7 Print Size'
+arm-none-eabi-size lab3_step3_fir_timing.elf  |tee "lab3_step3_fir_timing.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+  38712	   4344	  23352	  66408	  10368	lab3_step3_fir_timing.elf
+'Finished building: lab3_step3_fir_timing.elf.size'
+' '
+01:14:08 **** Incremental Build of configuration Debug for project lab3_step1_loopback ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+01:14:08 **** Incremental Build of configuration Debug for project lab3_step2_fir_filter ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+01:14:09 **** Incremental Build of configuration Debug for project lab3_step3_fir_timing ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.
+01:14:10 **** Incremental Build of configuration Debug for project test_adi ****
+make pre-build main-build 
+a9-linaro-pre-build-step
+' '
+make: Nothing to be done for 'main-build'.

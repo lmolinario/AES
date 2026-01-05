@@ -28,9 +28,9 @@
 * counter clocked at:
 *       CPU_Freq / 2  ≈ 333 MHz
 *
-* The Global Timer is read as a 64-bit value by combining
-* the lower and upper registers, ensuring correctness
-* across potential counter rollovers during measurement.
+* The lower 32 bits are read using:
+*
+*     Xil_In32(GLOBAL_TMR_BASEADDR);
 *
 * Measurement procedure:
 * 1. read timer → t_start
@@ -196,8 +196,6 @@ float HP[]={coeffHP};
 
 #include "TestVector.h"
 #define TEST_LEN_250 (sizeof(test_input) / sizeof(test_input[0]))
-#define FIR_TESTVECTOR_MODE 1   // 1 = run self-test only, 0 = normal real-time
-#define FIR_BUF_LEN 29   // max(N_LP_AGG=29, N_HP_AGG=25, N_HP=21, N_LP=20)
 
 
 int test_input[]  = { inputTest_250 };
@@ -444,13 +442,8 @@ int main()
     /* Initialize the underlying BSP (UART, caches, stdout redirection, etc.)
      * This is required before any I/O or platform-specific operations. */
 
-
-	#if FIR_TESTVECTOR_MODE
-		FIR_selftest_LP();   // STEP 2 – functional validation with TestVector.h
-		FIR_selftest_HP();   // STEP 2 – functional validation with TestVector.h
-		xil_printf("\nFIR self-test completed.\n\r");
-		while (1);           // stop here: validation only
-	#endif
+    FIR_selftest_LP();	 // ← STEP 2 – functional validation with TestVector.h
+    FIR_selftest_HP();   // ← STEP 2 – functional validation with TestVector.h
 
     print("Started!\n\r");
     xil_printf("\n=== LAB3  === Step 3: FIR Execution-Time Analysis ===\n\r");
@@ -485,10 +478,9 @@ u64 t_start, t_end;
 u32 k;
 
 /* Deterministic input buffer for timing */
-int test_buffer[FIR_BUF_LEN];
-for (k = 0; k < FIR_BUF_LEN; k++)
+int test_buffer[N_HP];
+for (k = 0; k < N_HP; k++)
     test_buffer[k] = (int)(k * 7);
-
 
 /* Warm-up (cache/pipeline stabilization) */
 for (k = 0; k < 200; k++)
@@ -503,7 +495,6 @@ const double ticks_budget = (double)GTIMER_HZ / (double)FS_HZ;   // ≈ 6937 tic
 t_start = read_global_timer_64();
 for (k = 0; k < ITERATIONS; k++)
     dummy = FIR_filter(test_buffer, HP, N_HP);
-
 t_end = read_global_timer_64();
 
 u64 total_ticks_on = t_end - t_start;
@@ -590,19 +581,15 @@ xil_printf(" \n\n");
 
 
     /* Sliding-window buffers for FIR convolution.
-     * Use the maximum required window size (FIR_BUF_LEN)
-     * to safely support all FIR configurations.
+     * Use the largest window size (N_HP) for both channels.
      */
-
-    int bufferL[FIR_BUF_LEN], bufferR[FIR_BUF_LEN];
-
+    int bufferL[N_HP], bufferR[N_HP];
 
     /* Initialize convolution buffers to zero */
-    for (int i = 0; i < FIR_BUF_LEN; i++) {
+    for (int i = 0; i < N_HP; i++) {
         bufferL[i] = 0;
         bufferR[i] = 0;
     }
-
 
     while (1) {
 
@@ -635,7 +622,7 @@ xil_printf(" \n\n");
          *   ...
          *   buffer[N_HP-1] = x[n-(N_HP-1)]
          */
-        for (int i = FIR_BUF_LEN - 1; i > 0; i--){
+        for (int i = N_HP - 1; i > 0; i--) {
             bufferL[i] = bufferL[i - 1];
             bufferR[i] = bufferR[i - 1];
         }

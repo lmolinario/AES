@@ -32,11 +32,30 @@
  *     • h[k]   = FIR coefficients (filter kernel)
  *     • N      = number of taps (LP or HP)
  *
- *  A sliding buffer stores the latest N input samples, updated
- *  each iteration by shifting the window and inserting x[n] at
- *  index 0. A flexible FIR function computes the convolution
- *  for any tap size, enabling easy testing of alternative
- *  kernels or more aggressive filter shapes.
+ *  A sliding buffer sized to the maximum supported number of
+ *  taps stores the most recent input samples. At each iteration,
+ *  the window is shifted and the newest sample x[n] is inserted
+ *  at index 0.
+ *
+ *  Each FIR configuration uses only the first N samples required
+ *  by the selected filter, allowing safe support for kernels
+ *  with different tap lengths without reallocating buffers.
+
+ *  FIR Validation (Test Vectors)
+ *  ------------------------------------------------------------
+ *  Before enabling real-time audio processing, the FIR filter
+ *  is validated using the reference test vectors provided with
+ *  the assignment (TestVector.h).
+ *
+ *  In validation mode, predefined input sequences are applied
+ *  to the FIR filter and the computed output is compared against
+ *  the expected reference output for both Low-Pass and High-Pass
+ *  configurations.
+ *
+ *  A compile-time switch allows running the self-test only,
+ *  clearly separating functional verification from real-time
+ *  execution.
+
  *
  *  Filter Selection (Using Switches)
  *  ------------------------------------------------------------
@@ -169,6 +188,8 @@ float HP[]={coeffHP};
 
 #include "TestVector.h"
 #define TEST_LEN_250 (sizeof(test_input) / sizeof(test_input[0]))
+#define FIR_TESTVECTOR_MODE 1   // 1 = run self-test only, 0 = normal real-time
+#define FIR_BUF_LEN 29   // max(N_LP_AGG=29, N_HP_AGG=25, N_HP=21, N_LP=20)
 
 
 int test_input[]  = { inputTest_250 };
@@ -419,8 +440,14 @@ int main()
     /* Initialize the underlying BSP (UART, caches, stdout redirection, etc.)
      * This is required before any I/O or platform-specific operations. */
 
-    FIR_selftest_LP();	 // ← STEP 2 – functional validation with TestVector.h
-    FIR_selftest_HP();   // ← STEP 2 – functional validation with TestVector.h
+
+	#if FIR_TESTVECTOR_MODE
+		FIR_selftest_LP();   // STEP 2 – functional validation with TestVector.h
+		FIR_selftest_HP();   // STEP 2 – functional validation with TestVector.h
+		xil_printf("\nFIR self-test completed.\n\r");
+		while (1);           // stop here: validation only
+	#endif
+
 
 
     print("\nStarted!\n\r");
@@ -454,7 +481,8 @@ int main()
     int SampleL, SampleR; // temporary storage for incoming stereo samples
 
     // FIR sliding-window buffers (use the largest size: N_HP)
-    int bufferL[N_HP], bufferR[N_HP];
+    int bufferL[FIR_BUF_LEN], bufferR[FIR_BUF_LEN];
+
 
     // Initialize buffers to zero (cold start of the convolution state)
     for (int i = 0; i < N_HP; i++) {
@@ -487,10 +515,11 @@ int main()
          *   ...
          *   buffer[N_HP-1] = x[n-(N_HP-1)]
          */
-        for (int i = N_HP - 1; i > 0; i--) {
+        for (int i = FIR_BUF_LEN - 1; i > 0; i--) {
             bufferL[i] = bufferL[i - 1];
             bufferR[i] = bufferR[i - 1];
         }
+
         bufferL[0] = SampleL;
         bufferR[0] = SampleR;
 
