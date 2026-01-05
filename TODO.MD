@@ -1,5 +1,11 @@
+LAB 3
+---
+
+
 LAB 4
 ---
+
+
 
 - RIVEDERE IL CODICE DEL LAB 4 :
   - step 2 Funzione vec_add_serial() con restrict.

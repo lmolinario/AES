@@ -496,9 +496,30 @@ for (k = 0; k < 200; k++)
 
 /* Real-time budget per sample in GlobalTimer ticks */
 const double ticks_budget = (double)GTIMER_HZ / (double)FS_HZ;   // ≈ 6937 ticks/sample
+xil_printf("\n=== REAL-TIME CONSTRAINT ===\n\r");
+xil_printf("Sampling frequency        = %lu Hz\n\r", FS_HZ);
+xil_printf("Global Timer frequency    = %lu Hz\n\r", GTIMER_HZ);
+xil_printf("Available budget          = %.2f ticks/sample\n\r",
+           ticks_budget);
+
+
+/* ------------------------------------------------------------
+ * STEP 3 – FIR execution-time measurement
+ *
+ * Goal:
+ *  - measure execution time of FIR_filter()
+ *  - compute available processing budget per sample (Fs = 48 kHz)
+ *  - estimate maximum number of FIR taps sustainable in real time
+ * ------------------------------------------------------------ */
 
 /* Measure */
 /* -------- CACHE ON -------- */
+
+/* ------------------------------------------------------------
+ * Execution time measurement of FIR_filter()
+ * (average over ITERATIONS calls)
+ * CACHE ENABLED
+ * ------------------------------------------------------------ */
 
 t_start = read_global_timer_64();
 for (k = 0; k < ITERATIONS; k++)
@@ -511,6 +532,10 @@ u64 total_ticks_on = t_end - t_start;
 double ticks_call_on = (double)total_ticks_on / ITERATIONS;
 double ticks_tap_on  = ticks_call_on / N_HP;
 double max_taps_on   = ticks_budget / ticks_tap_on;
+/* ticks_call_on : execution time of FIR_filter()
+ * ticks_tap_on  : average cost per FIR tap
+ * max_taps_on   : maximum FIR taps sustainable at Fs = 48 kHz
+ */
 
 /* fixed-point for xil_printf */
 int ticks_call_on_fp = (int)(ticks_call_on * 100);
@@ -527,7 +552,13 @@ xil_printf("budget     (x100) = %d\n\r", budget_fp);
 xil_printf("margin     (x100) = %d\n\r", margin_on_fp);
 xil_printf("max taps          = %d\n\r", max_taps_on_i);
 
+xil_printf("Real-time feasible (CACHE ON): %s\n\r",
+           (ticks_call_on < ticks_budget) ? "YES" : "NO");
 
+/* ------------------------------------------------------------
+ * Worst-case execution time analysis
+ * Cache disabled (instruction + data cache)
+ * ------------------------------------------------------------ */
 
 /**************************************************************
  * Cache OFF (worst-case-ish)
@@ -564,7 +595,12 @@ xil_printf("ticks/tap  (x100) = %d\n\r", ticks_tap_off_fp);
 xil_printf("margin     (x100) = %d\n\r", margin_off_fp);
 xil_printf("max taps          = %d\n\r", max_taps_off_i);
 
+xil_printf("Real-time feasible (CACHE OFF): %s\n\r",
+           (ticks_call_off < ticks_budget) ? "YES" : "NO");
 
+xil_printf("\n=== STEP 3 SUMMARY ===\n\r");
+xil_printf("Cache ON  : max FIR taps = %d\n\r", max_taps_on_i);
+xil_printf("Cache OFF : max FIR taps = %d\n\r", max_taps_off_i);
 
 
 /* Re-enable caches */
