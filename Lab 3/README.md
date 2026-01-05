@@ -113,7 +113,7 @@ Measured Output
 
 
 <p align="center">
-  <img src="../img/Lab3_step1.png" alt="Photo taken during AES Lab" width="650"/>
+  <img src="../img/lab3/Lab3_step1.png" alt="Photo taken during AES Lab" width="650"/>
 </p>
 <p align="center"><i>Measured Output: frequency is approximately 47.7 kHz </i></p>
 
@@ -193,7 +193,7 @@ Code snippet:
 
 
 <p align="center">
-  <img src="../img/Lab3_step2_1.png" alt="Filter selection via board switches" width="650"/>
+  <img src="../img/lab3/Lab3_step2_1.png" alt="Filter selection via board switches" width="650"/>
 </p>
 <p align="center"><i>Filter selection via board switches</i></p>
 
@@ -211,7 +211,7 @@ Analyzes computational cost using the Global Timer:
 
 Output Example:
 
-<p align="center"> <img src="../img/Lab3_step2_3.png" alt="FIR timing results via UART" width="650"/> </p> <p align="center"><i>UART output showing FIR execution-time analysis (cache ON / cache OFF)</i></p>
+<p align="center"> <img src="../img/lab3/Lab3_step2_3.png" alt="FIR timing results via UART" width="650"/> </p> <p align="center"><i>UART output showing FIR execution-time analysis (cache ON / cache OFF)</i></p>
 
 **Result Summary**
 
