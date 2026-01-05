@@ -126,7 +126,8 @@
 #define GLOBAL_TMR_BASEADDR          XPAR_PS7_GLOBALTIMER_0_S_AXI_BASEADDR
 
 #define GTIMER_CONTROL_OFFSET        0x08   // Offset of the Global Timer control register (enable, auto-increment)
-#define GLOBAL_TMR_FREQ              333000000  // Global Timer clock frequency: CPU/2 = 333 MHz
+#define CPU_FREQ_HZ        667000000   // ARM Cortex-A9 CPU frequency
+#define GLOBAL_TMR_FREQ    (CPU_FREQ_HZ / 2)   // Global Timer = CPU / 2
 
 /* --------------------------------------------------------------------------
  *  GLOBAL TIMER – ENABLE & READOUT
@@ -312,7 +313,7 @@ return data;
 }
 
 
-// FIR FIFO initialized not used in STEP 1
+// FIR FIFO initialized not used in STEP 1 kept for Step 2–3
 
 void initialize_FIFO(u32 fifoAddr){
 	Xil_Out32(AUDIO_FIFO + 0x2c, 0);
@@ -381,6 +382,10 @@ int main()
 
     u32 t0 = 0, t1 = 0;   // timer snapshots
     int j = 0;            // loop counter for delayed measurement
+    #define N_SAMPLES  100        // number of samples used for Fs averaging
+
+    u64 accum_ticks = 0;          // accumulator for timer deltas
+    int sample_cnt = 0;           // number of measured deltas
 
 
     /* --------------------------------------------------------------------------
@@ -399,86 +404,101 @@ int main()
 
     while (1)
     {
-        /* Read one stereo sample from the I²S RX FIFO */
+        /* ----------------------------------------------------------------------
+         *  AUDIO ACQUISITION (BLOCKING)
+         *
+         *  One stereo audio frame (Left + Right) is synchronously acquired
+         *  from the I²S RX FIFO. The blocking behavior guarantees that
+         *  samples are processed at the exact rate imposed by the codec,
+         *  which is a necessary condition for reliable timing measurements
+         *  and real-time audio loopback.
+         * ---------------------------------------------------------------------- */
         u32 L = I2SFifoRead(AUDIO_FIFO);
         u32 R = I2SFifoRead(AUDIO_FIFO);
 
-        /**************************************************************************
-         * CORRECT READOUT OF THE 32-BIT (LSB) GLOBAL TIMER COUNTER
+        /* ----------------------------------------------------------------------
+         *  SAMPLING FREQUENCY MEASUREMENT (Fs)
          *
-         *  In the reference code provided by the instructor:
-         *      times[0] = Xil_In32(GLOBAL_TMR_BASEADDR);
+         *  The sampling period is measured using the ARM Cortex-A9 Global
+         *  Timer by computing the elapsed timer ticks between two consecutive
+         *  audio frames. To improve measurement robustness and reduce jitter,
+         *  the measurement is averaged over N_SAMPLES consecutive periods.
          *
-         *  → This reads the *base address*, which corresponds to the CONTROL
-         *    register, not the counter. Since the CONTROL register does not
-         *    increment, the returned value is always 0 → no valid measurement.
-         *
-         *  Correct approach:
-         *      Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET)
-         *
-         *  This retrieves the actual tick count from the lower 32 bits
-         *  of the Global Timer.
-         **************************************************************************/
-
-        /* ------------------------------------------------------------------
-         *  CORRECT TIMER READOUT (required by the assignment)
-         *
-         *  The counter LSB is mapped at:
-         *
-         *      GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET
-         *
-         *  The base address alone must never be used.
-         * ------------------------------------------------------------------ */
-
-        if (j == 300)
+         *  A delay of j >= 300 iterations is introduced to ensure that:
+         *    • the audio pipeline is fully initialized
+         *    • transient effects at startup are avoided
+         * ---------------------------------------------------------------------- */
+        if (j >= 300 && sample_cnt < N_SAMPLES)
+        {
+            /* Timer snapshot at the beginning of one sampling period */
             t0 = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
 
-        if (j == 301)
-        {
+            /* ------------------------------------------------------------------
+             *  Acquisition of the next stereo frame.
+             *
+             *  The time elapsed between t0 and t1 corresponds to exactly one
+             *  sampling period Ts imposed by the I²S/codec subsystem.
+             * ------------------------------------------------------------------ */
+            u32 L_tmp = I2SFifoRead(AUDIO_FIFO);
+            u32 R_tmp = I2SFifoRead(AUDIO_FIFO);
+
+            /* Timer snapshot at the end of the sampling period */
             t1 = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
-            u32 delta = t1 - t0;
 
-            /**********************************************************************
-             * CORRECT SAMPLING FREQUENCY (Fs) COMPUTATION
-             *
-             *  CPU clock      = 667 MHz
-             *  Global Timer   = CPU/2 = 333 MHz
-             *
-             *  Therefore:
-             *      1 tick = 1 / 333e6 ≈ 3 ns
-             *
-             *  Sampling frequency:
-             *      Fs = TIMER_CLOCK / delta
-             *         = 333 MHz / delta
-             *
-             **********************************************************************/
+            /* Accumulate elapsed timer ticks for averaging */
+            accum_ticks += (t1 - t0);
+            sample_cnt++;
 
+            /* Forward the additionally acquired samples to preserve continuity
+             * of the real-time audio stream during the measurement phase */
+            I2SFifoWrite(AUDIO_FIFO, L_tmp);
+            I2SFifoWrite(AUDIO_FIFO, R_tmp);
+        }
 
-            float Fs = (float)GLOBAL_TMR_FREQ / (float)delta;
+        /* ----------------------------------------------------------------------
+         *  FINAL Fs COMPUTATION AND REPORTING
+         *
+         *  The average sampling period is computed as:
+         *
+         *      avg_delta = accum_ticks / N_SAMPLES
+         *
+         *  Since the Global Timer runs at CPU_FREQUENCY / 2, the sampling
+         *  frequency is obtained as:
+         *
+         *      Fs = GLOBAL_TMR_FREQ / avg_delta
+         *
+         *  UART output is performed only once, outside the timing-critical
+         *  measurement window, to avoid perturbing the results.
+         * ---------------------------------------------------------------------- */
+        if (sample_cnt == N_SAMPLES)
+        {
+            float avg_delta = (float)accum_ticks / (float)N_SAMPLES;
+            float Fs = (float)GLOBAL_TMR_FREQ / avg_delta;
+
             int Fs100 = (int)(Fs * 100);
-
-            /**********************************************************************
-             * NON-INTRUSIVE PRINTING
-             *
-             *  In the initial version, printing inside initialization functions
-             *  introduced significant delays → invalid measurements.
-             *
-             *  Now printing occurs only after t0 and t1 are collected, ensuring
-             *  no interference with the timing-critical section.
-             **********************************************************************/
-
-            xil_printf("delta_ticks = %u   Fs ~= %d.%02d Hz\n\r",
-                       delta,
+            xil_printf("Fs (avg over %d samples) ~= %d.%02d Hz\n\r",
+                       N_SAMPLES,
                        Fs100 / 100,
                        Fs100 % 100);
 
+            /* Prevent further printing */
+            sample_cnt++;
         }
 
-        /* Audio passthrough (loopback) */
+        /* ----------------------------------------------------------------------
+         *  REAL-TIME AUDIO LOOPBACK
+         *
+         *  The originally acquired stereo sample is immediately forwarded
+         *  to the I²S TX FIFO, implementing a direct IN → OUT passthrough.
+         *  This confirms correct end-to-end operation of the audio chain:
+         *
+         *      ADC → I²S RX → CPU → I²S TX → DAC
+         * ---------------------------------------------------------------------- */
         I2SFifoWrite(AUDIO_FIFO, L);
         I2SFifoWrite(AUDIO_FIFO, R);
 
-        if (j <= 301) j++;
+        /* Loop iteration counter */
+        j++;
     }
 
     cleanup_platform();
