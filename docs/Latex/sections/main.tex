@@ -1,224 +1,232 @@
 \section*{Lab 4 -- Parallel Processing and SIMD Evaluation}
 \addcontentsline{toc}{section}{Lab 4 -- Parallel Processing and SIMD Evaluation}
 
+This laboratory activity addresses \textbf{Lab~4 -- Parallel Processing} and focuses on the
+analysis of task-level and data-level parallelism on the dual-core ARM Cortex-A9
+architecture of the Zybo~Z7 board. The experiment is conducted in a bare-metal
+environment and aims at evaluating both the benefits and limitations of parallel
+execution and SIMD auto-vectorization on a shared-memory embedded platform.
 
-This assignment is related to \textbf{Lab 4 -- Parallel Processing} and focuses on the exploitation of task-level parallelism on the dual-core ARM Cortex-A9 architecture of the Zybo Z7 board.
-
-The main objective of the laboratory activity is to design and evaluate a shared-memory parallel application in a bare-metal environment, where \textbf{Core~0 (Master)} and \textbf{Core~1 (Worker)} cooperate to perform a vector addition operation. Two input vectors $A$ and $B$ are allocated in shared DDR memory, and the resulting vector $C$ is computed according to:
+The core objective of the lab is the design and evaluation of a shared-memory
+parallel application in which \textbf{Core~0 (Master)} and \textbf{Core~1 (Worker)}
+cooperate to compute a vector addition. Two input vectors $A$ and $B$ are allocated
+in shared DDR memory, and the resulting vector $C$ is computed as
 \[
-C[i] = A[i] + B[i]
+C[i] = A[i] + B[i].
 \]
+The computational workload is evenly partitioned between the two cores, with
+Core~0 processing the first half of the vector and Core~1 processing the second half.
+Inter-core coordination is achieved through a minimal synchronization mechanism
+based on shared memory flags (\texttt{start}, \texttt{done0}, \texttt{done1}), without
+any operating system support.
 
-The workload is evenly partitioned between the two processing cores: Core~0 computes the first half of the vector, while Core~1 processes the second half. Coordination between the cores is achieved through a minimal synchronization mechanism based on shared memory flags (\texttt{start}, \texttt{done0}, \texttt{done1}), without relying on any operating system support.
-
-Execution time is measured using the ARM Cortex-A9 Global Timer, allowing a quantitative comparison between serial and parallel implementations. In addition, the lab investigates the impact of data-level parallelism by enabling compiler auto-vectorization through ARM NEON SIMD instructions.
-
-Overall, this laboratory introduces fundamental concepts of low-level multi-core programming, including explicit workload partitioning, shared-memory communication, synchronization, and performance evaluation in a bare-metal embedded system.
-
+Execution time is measured using the ARM Cortex-A9 Global Timer, allowing a
+quantitative comparison between serial and parallel implementations. In addition,
+the impact of data-level parallelism is investigated by enabling compiler
+auto-vectorization through ARM NEON SIMD instructions. Overall, the laboratory
+provides insight into low-level multi-core programming, explicit workload
+partitioning, shared-memory communication, synchronization, and performance
+evaluation on embedded systems.
 
 \subsection*{System Debugger Configuration}
 \addcontentsline{toc}{subsection}{System Debugger Configuration}
 
-A \textit{System Debugger} run configuration was created in the Xilinx SDK environment.
-Before launching the application, the following operations were explicitly enabled in the
-\textbf{Target Setup} tab, as required:
+To ensure correct and deterministic execution, a \textit{System Debugger} run
+configuration was created in the Xilinx SDK environment. Before launching the
+application, the system is fully reset and the FPGA fabric (PL) is reprogrammed.
+The Processing System (PS) is initialized through the execution of
+\texttt{ps7\_init}, followed by \texttt{ps7\_post\_config}, which enables the
+level shifters between PL and PS.
 
-\begin{enumerate}
-    \item Reset entire system, clearing the FPGA fabric (PL).
-    \item Program the FPGA fabric (PL).
-    \item Run \texttt{ps7\_init} to initialize the Processing System (PS).
-    \item Run \texttt{ps7\_post\_config} to enable level shifters from PL to PS.
-\end{enumerate}
-
-In the \textbf{Application} tab:
-\begin{itemize}
-    \item The \texttt{master.elf} executable was assigned to Processor 0.
-    \item The \texttt{worker.elf} executable was assigned to Processor 1.
-    \item The options \textit{reset processor} and \textit{stop at program entry} were disabled.
-\end{itemize}
-
-This configuration ensures a clean and deterministic execution environment for timing measurements.
-
-
+The two application binaries are explicitly assigned to the corresponding
+processors, with \texttt{master.elf} mapped to Processor~0 and \texttt{worker.elf}
+mapped to Processor~1. Automatic processor reset and stopping at program entry are
+disabled to allow both cores to start execution simultaneously. This configuration
+is essential to obtain reliable timing measurements and correct inter-core
+synchronization.
 
 \subsection*{Linker Script Modification}
+\addcontentsline{toc}{subsection}{Linker Script Modification}
 
-In accordance with the laboratory instructions, the linker script
-(\texttt{lscript.ld}) was explicitly modified to ensure correct memory
-mapping for the dual-core shared-memory application.
+In order to support a shared-memory dual-core execution model, the linker script
+(\texttt{lscript.ld}) was explicitly modified for both applications. The memory
+layout was carefully configured to ensure that executable code, global and static
+data, stack, and heap are all placed in DDR memory regions accessible by both
+processors, while avoiding any overlap with the shared communication area.
 
-In particular, the DDR memory regions were configured as required so that:
-\begin{itemize}
-    \item executable code,
-    \item global and static data,
-    \item stack and heap,
-    \item and the shared data structures
-\end{itemize}
-are all placed in the DDR address space accessible by both processors.
-
-This modification is essential to guarantee correct data sharing between
-Core~0 and Core~1 and to avoid memory overlap with private sections
-managed by the linker.
-
-Figure~\ref{fig:lab4_lscript} shows the modified linker script used for this laboratory,
-which follows the structure and memory layout provided in the lab instructions.
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.95\linewidth]{images/worker_lscript}
-    \caption{Modified linker script (\texttt{lscript.ld}) used in Lab~4.}
-    \label{fig:lab4_lscript}
-\end{figure}
-
-Figure~\ref{fig:lab4_lscript} shows the modified linker script used for this laboratory,
-which follows the structure and memory layout provided in the lab instructions.
-
-\begin{figure}[h]
+The shared DDR region used for inter-core communication is excluded from all
+linker-managed sections, preventing accidental overwriting by either core.
+This modification is a critical requirement for correctness and determinism in
+bare-metal multi-core systems and follows the memory layout prescribed in the
+laboratory instructions.
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.95\linewidth]{images/master_lscript}
-    \caption{Modified linker script (\texttt{lscript.ld}) used in Lab~4.}
-    \label{fig:lab4_lscript}
+    \caption{Modified linker script for the Master application (Core~0).
+    All sections are placed in DDR while avoiding overlap with the shared-memory region.}
+    \label{fig:lab4_master_lscript}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{images/worker_lscript}
+    \caption{Modified linker script for the Worker application (Core~1).
+    The shared DDR region is excluded from all linker-managed sections.}
+    \label{fig:lab4_worker_lscript}
 \end{figure}
 
 
 \subsection*{Serial Baseline Integration}
 \addcontentsline{toc}{subsection}{Serial Baseline Integration}
 
-To evaluate the impact of SIMD optimizations, the following serial reference implementation
-was integrated into the master application:
-
-\begin{verbatim}
-void vec_add_serial(u32 * restrict c,
-                    const u32 * restrict a,
-                    const u32 * restrict b,
-                    int n)
-{
-    for (int i = 0; i < n; ++i) {
-        c[i] = a[i] + b[i];
-    }
-}
-\end{verbatim}
-
-This function is executed entirely on Processor 0 and is used as a baseline for comparison
-with the parallel implementation.
+To provide a meaningful reference for performance evaluation, a serial baseline
+implementation of the vector addition was integrated into the master application.
+The function executes entirely on Core~0 and serves as a baseline for comparison
+with the parallel implementation. The use of the \texttt{restrict} qualifier
+enables the compiler to apply aggressive optimizations and auto-vectorization,
+facilitating the evaluation of SIMD effectiveness independently of task-level
+parallelism.
 
 \subsection*{Compilation Settings}
 \addcontentsline{toc}{subsection}{Compilation Settings}
 
-Both the \texttt{master} and \texttt{worker} projects were compiled using aggressive optimization
-and auto-vectorization flags.
-
-\paragraph{Compiler flags}
-\begin{verbatim}
--c -fmessage-length=0 -mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard
--std=c99 -mvectorize-with-neon-quad -ftree-vectorize
--fopt-info-vec-optimized -fopt-info-vec-missed -ffast-math
-\end{verbatim}
-
-\paragraph{Linker flags}
-\begin{verbatim}
--mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard -std=c99
--mvectorize-with-neon-quad -ftree-vectorize
--Wl,-build-id=none -specs=Xilinx.spec
-\end{verbatim}
-
-Figures~\ref{fig:master_compiler}--\ref{fig:worker_linker} show the configuration of the
-compiler and linker options for both projects.
-
-\begin{figure}[h]
+Both the \texttt{master} and \texttt{worker} applications were compiled using
+aggressive optimization settings, explicitly enabling ARM NEON support and
+compiler auto-vectorization. The selected compiler and linker flags allow the
+generation of SIMD instructions and provide diagnostic feedback on vectorization
+decisions. This configuration ensures that both task-level parallelism and
+instruction-level parallelism are exploited to the maximum extent allowed by the
+architecture and memory subsystem.
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{images/master_compiler.png}
-    \caption{Compiler options for the master application.}
-    \label{fig:master_compiler}
+    \includegraphics[width=0.9\linewidth]{images/master_compiler}
+    \caption{Compiler optimization and auto-vectorization flags used for the Master application.}
+    \label{fig:lab4_master_compiler}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{images/master_linker.png}
-    \caption{Linker options for the master application.}
-    \label{fig:master_linker}
+    \includegraphics[width=0.9\linewidth]{images/worker_compiler}
+    \caption{Compiler optimization and auto-vectorization flags used for the Worker application.}
+    \label{fig:lab4_worker_compiler}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{images/worker_compiler.png}
-    \caption{Compiler options for the worker application.}
-    \label{fig:worker_compiler}
+    \includegraphics[width=0.9\linewidth]{images/master_linker}
+    \caption{Linker configuration for the Master application.}
+    \label{fig:lab4_master_linker}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{images/worker_linker.png}
-    \caption{Linker options for the worker application.}
-    \label{fig:worker_linker}
+    \includegraphics[width=0.9\linewidth]{images/worker_linker}
+    \caption{Linker configuration for the Worker application.}
+    \label{fig:lab4_worker_linker}
 \end{figure}
 
 \subsection*{Execution Time Measurements}
 \addcontentsline{toc}{subsection}{Execution Time Measurements}
 
-Execution time was measured in CPU cycles using the ARM \textit{Global Timer}.
-Measurements were performed for different array sizes to study scalability effects.
+Execution time measurements were performed using the ARM Cortex-A9 Global Timer
+and expressed in CPU cycles. Experiments were conducted for multiple array sizes
+(\texttt{ARRAY\_SIZE = 100}, \texttt{1000}, and \texttt{10000}) to evaluate the
+scalability of the proposed approach.
 
-Figures~\ref{fig:lab4_100}--\ref{fig:lab4_10000} show the UART output for
-array sizes of 100, 1000, and 10000 elements, respectively.
+The experimental results show that parallel execution does not yield a significant
+speedup compared to the serial baseline. In some cases, the parallel implementation
+exhibits execution times comparable to or slightly higher than the serial version.
+This behavior is consistent across all tested array sizes.
 
-\begin{figure}[h]
+From an architectural perspective, these results are expected and consistent with
+the state of the art. The vector addition kernel is strongly memory-bound, and both
+cores concurrently access the same shared DDR memory. As a consequence, memory
+bandwidth contention dominates execution time, limiting the benefits of task-level
+parallelism despite the even workload partitioning and minimal synchronization
+overhead.
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{images/lab4_100.png}
-    \caption{Execution results for ARRAY\_SIZE = 100.}
+    \includegraphics[width=0.9\linewidth]{images/lab4_100}
+    \caption{UART output for the parallel vector addition with \texttt{ARRAY\_SIZE = 100}.}
     \label{fig:lab4_100}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{images/lab4_1000.png}
-    \caption{Execution results for ARRAY\_SIZE = 1000.}
+    \includegraphics[width=0.9\linewidth]{images/lab4_1000}
+    \caption{UART output for the parallel vector addition with \texttt{ARRAY\_SIZE = 1000}.}
     \label{fig:lab4_1000}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{images/lab4_10000.png}
-    \caption{Execution results for ARRAY\_SIZE = 10000.}
+    \includegraphics[width=0.9\linewidth]{images/lab4_10000}
+    \caption{UART output for the parallel vector addition with \texttt{ARRAY\_SIZE = 10000}.}
     \label{fig:lab4_10000}
 \end{figure}
-
-The results show that parallel execution does not provide a significant speedup.
-This behavior is expected, as the workload is memory-bound and both processors
-contend for the same DDR memory bandwidth.
 
 \subsection*{Assembly Inspection and SIMD Verification}
 \addcontentsline{toc}{subsection}{Assembly Inspection and SIMD Verification}
 
-The compiled \texttt{master.elf} file was inspected using the SDK disassembly view.
-The analysis confirms that the serial baseline function was successfully
-auto-vectorized by the compiler.
+To assess the effectiveness of data-level parallelism, the compiled
+\texttt{master.elf} binary was inspected using the SDK disassembly view. The
+analysis confirms that the serial baseline loop was successfully auto-vectorized
+by the compiler.
 
-In particular, the following NEON instructions are observed:
-\begin{itemize}
-    \item \texttt{vld1.32} for vector loads,
-    \item \texttt{vadd.i32} for vector addition,
-    \item \texttt{vst1.32} for vector stores.
-\end{itemize}
-
-Figure~\ref{fig:check_neon} highlights the NEON instructions in the disassembled code.
-
-\begin{figure}[h]
+The presence of ARM NEON instructions, such as vector loads
+(\texttt{vld1.32}), vector additions (\texttt{vadd.i32}), and vector stores
+(\texttt{vst1.32}), demonstrates that instruction-level parallelism is effectively
+exploited. This confirms that the lack of performance improvement in the parallel
+version is not due to suboptimal code generation, but rather to fundamental memory
+system limitations.
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\linewidth]{images/check_neon.png}
-    \caption{Disassembly showing NEON vector instructions in the serial implementation.}
-    \label{fig:check_neon}
+    \includegraphics[width=0.95\linewidth]{images/master_elf}
+    \caption{Disassembly of the serial baseline showing ARM NEON SIMD instructions
+    (\texttt{vld1.32}, \texttt{vadd.i32}, \texttt{vst1.32}).}
+    \label{fig:lab4_neon}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{images/lab4output}
+    \caption{UART output showing correct parallel execution on both cores (Master and Worker).}
+    \label{fig:lab4_output}
 \end{figure}
 
+\subsection*{Results Summary}
+\addcontentsline{toc}{subsection}{Lab 4 -- Results Summary}
+
+Execution time measurements were performed using the ARM Cortex-A9 Global Timer
+to evaluate the impact of parallel execution and SIMD auto-vectorization on a
+vector addition workload. The following array sizes were considered:
+\texttt{ARRAY\_SIZE = 100}, \texttt{1000}, and \texttt{10000}.
+
+For all tested configurations, the parallel implementation running on two cores
+does not provide a significant execution-time improvement compared to the serial
+baseline. In some cases, the parallel version exhibits similar or slightly higher
+execution times. This behavior is consistent across all array sizes.
+
+The limited speedup is mainly due to the memory-bound nature of the workload.
+Both cores concurrently access the same shared DDR memory, resulting in bandwidth
+contention that dominates execution time and limits the benefits of task-level
+parallelism.
+
+Assembly inspection confirms that the serial baseline is successfully
+auto-vectorized by the compiler using ARM NEON SIMD instructions
+(\texttt{vld1.32}, \texttt{vadd.i32}, \texttt{vst1.32}). While SIMD reduces the
+number of executed instructions, the overall performance remains constrained by
+memory access latency rather than computational throughput.
 
 \subsection*{Conclusions}
 \addcontentsline{toc}{subsection}{Conclusions}
 
-This lab demonstrates that:
-\begin{itemize}
-    \item Parallel execution on multiple cores does not necessarily lead to performance gains
-          for memory-bound workloads.
-    \item SIMD auto-vectorization using NEON is successfully applied by the compiler and provides
-          instruction-level parallelism.
-    \item Memory bandwidth and synchronization overhead are the dominant limiting factors in this experiment.
-\end{itemize}
+The results of this laboratory are fully aligned with established principles in
+parallel computing and embedded system design. While both task-level parallelism
+and SIMD auto-vectorization are correctly implemented and verified, the overall
+performance is constrained by shared memory bandwidth and access contention.
+
+This lab highlights that parallel execution on multi-core embedded systems does
+not automatically guarantee performance improvements, particularly for
+memory-bound workloads. At the same time, it demonstrates the effectiveness of
+compiler-assisted SIMD vectorization and underscores the importance of memory
+hierarchy considerations when designing high-performance embedded applications.

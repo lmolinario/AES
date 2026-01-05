@@ -1,3 +1,4 @@
+// worker.h
 #include "xparameters.h"
 #include "xil_cache.h"
 #include "xil_printf.h"
@@ -20,29 +21,12 @@ int main(void)
     while (Xil_In32(XPAR_AXI_GPIO_2_BASEADDR)==0);//wait for the start on button
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     // Wait until core 0 sets start flag
     while (SHARED->start == 0) {
         // busy-wait
     }
 
-    xil_printf("Core 1: Starting second half computation\r\n");
+//    xil_printf("Core 1: Starting second half computation\r\n");
 
     // Process second half of the array
     for (i = ARRAY_SIZE / 2; i < ARRAY_SIZE; ++i) {
@@ -52,13 +36,11 @@ int main(void)
 
     SHARED->done1 = 1;
 
-    xil_printf("Core 1: Done.\r\n");
+//    xil_printf("Core 1: Done.\r\n");
 
     while (1) {
-        xil_printf("PING worker\r\n");
-        for (volatile int d = 0; d < 1000000; d++);
+        // Idle loop
     }
-
 
     return 0;
 }

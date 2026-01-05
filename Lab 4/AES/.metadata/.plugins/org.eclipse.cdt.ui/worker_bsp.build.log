@@ -1,4 +1,4 @@
-17:04:31 **** Build of project worker_bsp ****
+22:26:02 **** Build of project worker_bsp ****
 make -k all 
 "Running Make include in ps7_cortexa9_1/libsrc/axi_i2s_adi_v1_0/src"
 make -C ps7_cortexa9_1/libsrc/axi_i2s_adi_v1_0/src -s include  "SHELL=CMD" "COMPILER=arm-none-eabi-gcc" "ARCHIVER=arm-none-eabi-ar" "COMPILER_FLAGS=  -O2 -c" "EXTRA_COMPILER_FLAGS=-mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -nostartfiles -g -Wall -Wextra"
@@ -50,7 +50,6 @@ axi_i2s_adi_selftest.c:52:60: warning: comparison of integer expressions of diff
 axi_i2s_adi_selftest.c:36:6: warning: unused variable 'Index' [-Wunused-variable]
   int Index;
       ^~~~~
-arm-none-eabi-ar: creating ../../../lib/libxil.a
 "Running Make libs in ps7_cortexa9_1/libsrc/coresightps_dcc_v1_5/src"
 make -C ps7_cortexa9_1/libsrc/coresightps_dcc_v1_5/src -s libs  "SHELL=CMD" "COMPILER=arm-none-eabi-gcc" "ARCHIVER=arm-none-eabi-ar" "COMPILER_FLAGS=  -O2 -c" "EXTRA_COMPILER_FLAGS=-mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -nostartfiles -g -Wall -Wextra"
 "Compiling coresightps_dcc"
@@ -126,5 +125,5 @@ make -C ps7_cortexa9_1/libsrc/xadcps_v2_3/src -s libs  "SHELL=CMD" "COMPILER=arm
 "Compiling xadcps"
 'Finished building libraries'
 
-17:04:58 Build Finished (took 26s.633ms)
+22:26:31 Build Finished (took 29s.20ms)
 

@@ -72,6 +72,7 @@ Lab4_ParallelProcessing/
 ├── master.c                         → Core 0: serial + parallel + timing
 ├── worker.c                         → Core 1: second-half computation
 ├── shared.h                         → Shared DDR structure and flags
+├── main.pdf                         → Experimental result
 └── README.md                        → Lab documentation (this file)
 ```
 
@@ -212,10 +213,7 @@ instructions.
 
 ```
 
--mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard
--std=c99 -mvectorize-with-neon-quad -ftree-vectorize
--fopt-info-vec-optimized -fopt-info-vec-missed -ffast-math
-
+-c -fmessage-length=0 -MT"$@" -mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard -std=c99 -mvectorize-with-neon-quad -ftree-vectorize -fopt-info-vec-optimized -fopt-info-vec-missed -ffast-math
 ```
 
 <p align="center">
@@ -236,10 +234,7 @@ instructions.
 
 ```
 
--mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard
--mvectorize-with-neon-quad -ftree-vectorize
--Wl,-build-id=none -specs=Xilinx.spec
-
+-mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard -std=c99 -mvectorize-with-neon-quad -ftree-vectorize -Wl,-build-id=none -specs=Xilinx.spec 
 ```
 
 <p align="center">
@@ -360,24 +355,21 @@ ARRAY_SIZE = 10000
 
 This behavior is expected on shared-memory systems without private caches.
 
-## **Measured Results Summary (Lab 4)**
+## **Brief Results Summary**
 
-Execution time measurements were performed using the ARM Cortex-A9 Global Timer
-for both the serial and parallel implementations of the vector addition task.
+Execution time measurements were performed for different array sizes
+(`ARRAY_SIZE = 100`, `1000`, `10000`) using the ARM Cortex-A9 Global Timer.
 
-The following array sizes were considered:
+The experimental results show that parallel execution on two cores does not
+provide a significant speedup compared to the serial implementation.
+This behavior is expected, since the vector addition workload is
+**memory-bound** and both cores access the same shared DDR memory, leading
+to bandwidth contention.
 
-* `ARRAY_SIZE = 100`
-* `ARRAY_SIZE = 1000`
-* `ARRAY_SIZE = 10000`
-
-For all tested configurations, the parallel execution using two cores does not
-provide a significant speedup compared to the serial version. The measured
-execution times are very similar, and in some cases the parallel version is
-slightly slower.
-
-This behavior is expected, since the workload is memory-bound and both cores
-access the same shared DDR memory, resulting in bandwidth contention.
+SIMD auto-vectorization using ARM NEON instructions was successfully
+applied to the serial baseline, as verified in the assembly output.
+However, while SIMD improves instruction-level parallelism, it does not
+overcome the memory bandwidth limitation of the system.
 
 
 ---
