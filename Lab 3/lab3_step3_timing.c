@@ -430,7 +430,20 @@ int main()
     /* Initialize the underlying BSP (UART, caches, stdout redirection, etc.)
      * This is required before any I/O or platform-specific operations. */
 
-
+    /* ------------------------------------------------------------
+     * STEP 2 – FIR FUNCTIONAL SELF-TEST (OFFLINE)
+     * ------------------------------------------------------------
+     * When FIR_TESTVECTOR_MODE is enabled, the program executes
+     * a deterministic validation of the FIR filter using predefined
+     * input/output vectors (TestVector.h).
+     *
+     * This mode is used to verify:
+     *  - correctness of the FIR convolution
+     *  - correct coefficient ordering
+     *  - absence of numerical or indexing errors
+     *
+     * No real-time audio processing is performed in this mode.
+     */
 	#if FIR_TESTVECTOR_MODE
 		FIR_selftest_LP();   // STEP 2 – functional validation with TestVector.h
 		FIR_selftest_HP();   // STEP 2 – functional validation with TestVector.h
@@ -453,8 +466,12 @@ int main()
      * audio loop, and averaged over multiple iterations to reduce jitter.
 	 *********************************************************************/
 
-	/* Enable Global Timer (enable + auto-increment) */
-	Xil_Out32(GLOBAL_TMR_BASEADDR + GTIMER_CONTROL_OFFSET, 0x03);
+	 /* Enable Global Timer:
+     *  - bit[0] = enable
+     *  - bit[1] = auto-increment
+     */
+    Xil_Out32(GLOBAL_TMR_BASEADDR + GTIMER_CONTROL_OFFSET, 0x03);
+
 
 	/* Optional: disable caches for second measurement */
 	// Xil_ICacheDisable();
@@ -469,7 +486,17 @@ int main()
 
     u64 acc_cycles = 0;
 
-    /* Measure FIR execution time averaged over FIR_MEAS_ITER runs */
+    /* ------------------------------------------------------------
+     * FIR execution time measurement (cache ENABLED)
+     * ------------------------------------------------------------
+     * The FIR filter is executed FIR_MEAS_ITER times on a dummy
+     * input buffer.
+     *
+     * The execution time is averaged to reduce:
+     *  - timer read jitter
+     *  - pipeline and cache warm-up effects
+     */
+
     for (int i = 0; i < FIR_MEAS_ITER; i++) {
         t_start = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
         FIR_filter(timing_buffer, LP, N_LP);
@@ -478,7 +505,9 @@ int main()
         acc_cycles += (t_end - t_start);
     }
 
+    /* Average number of timer ticks required by a single FIR call */
     fir_cycles = acc_cycles / FIR_MEAS_ITER;
+
 
 
 	/* Compute real-time budget */
@@ -488,6 +517,17 @@ int main()
     u32 max_taps_rt = cycles_per_sample / cycles_per_tap;
 
 
+    /* ------------------------------------------------------------
+     * Real-time feasibility analysis
+     * ------------------------------------------------------------
+     * cycles_per_sample represents the maximum number of timer
+     * ticks available to process ONE audio sample at Fs ≈ 48 kHz.
+     *
+     * cycles_per_tap is an estimated per-coefficient cost.
+     *
+     * max_taps_rt estimates the maximum FIR length that can be
+     * sustained in real time without violating the sampling period.
+     */
 
 
     /* Cache ON */
@@ -498,11 +538,19 @@ int main()
     xil_printf("Estimated max FIR taps (RT): ~%u\n\r", max_taps_rt);
 
 
-        /* ------------------------------------------------------------
-     * Cache-disabled measurement (worst-case execution time)
-     * ------------------------------------------------------------ */
+    /* ------------------------------------------------------------
+     * Cache-disabled measurement (worst-case scenario)
+     * ------------------------------------------------------------
+     * Instruction and data caches are explicitly disabled to
+     * evaluate the worst-case execution time of the FIR filter.
+     *
+     * This provides a conservative upper bound for real-time
+     * feasibility analysis.
+     */
+
     Xil_ICacheDisable();
     Xil_DCacheDisable();
+    /* Re-run the FIR timing measurement with caches disabled */
 
     acc_cycles = 0;
 
@@ -518,7 +566,7 @@ int main()
     u32 cycles_per_tap_nocache = fir_cycles_nocache / N_LP;
     u32 max_taps_rt_nocache = cycles_per_sample / cycles_per_tap_nocache;
 
-    /* Cache OFF */
+    /* Report worst-case execution time (cache OFF) */
     xil_printf("\n=== CACHE DISABLED ===\n\r");
     xil_printf("FIR cycles (cache OFF): %u\n\r", fir_cycles_nocache);
     xil_printf("Estimated cycles per tap (cache OFF): %u\n\r", cycles_per_tap_nocache);

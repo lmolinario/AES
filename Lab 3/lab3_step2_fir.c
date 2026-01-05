@@ -441,9 +441,23 @@ int main()
      * This is required before any I/O or platform-specific operations. */
 
 
+     /* ------------------------------------------------------------
+     * STEP 2 – FIR FUNCTIONAL SELF-TEST (OFFLINE)
+     * ------------------------------------------------------------
+     * When FIR_TESTVECTOR_MODE is enabled, the program executes
+     * a deterministic validation of the FIR filter using predefined
+     * input/output vectors (TestVector.h).
+     *
+     * This mode is used to verify:
+     *  - correctness of the FIR convolution
+     *  - correct coefficient ordering
+     *  - absence of numerical or indexing errors
+     *
+     * No real-time audio processing is performed in this mode.
+     */
 	#if FIR_TESTVECTOR_MODE
-		FIR_selftest_LP();   // STEP 2 – functional validation with TestVector.h
-		FIR_selftest_HP();   // STEP 2 – functional validation with TestVector.h
+		FIR_selftest_LP();
+		FIR_selftest_HP();
 		xil_printf("\nFIR self-test completed.\n\r");
 		while (1);           // stop here: validation only
 	#endif
