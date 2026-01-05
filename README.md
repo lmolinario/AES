@@ -39,8 +39,7 @@ Each lab focuses on hands-on embedded programming for the **MicroBlaze soft-core
 | **Lab 5** | **DNN on MNIST**                          | (1) *To be defined* – MNIST dataset loading and preprocessing <br> (2) *To be defined* – DNN inference on embedded platform <br> (3) *To be defined* – performance and accuracy evaluation                                                                                           |
 
 
-
-    |     v                       
+                
 ##  Repository Structure
 
 ```
