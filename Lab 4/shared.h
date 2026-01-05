@@ -4,7 +4,7 @@
 
 #include "xil_types.h"
 
-#define ARRAY_SIZE 100 //default value -  1000 and 10000 for lab evaluation  
+#define ARRAY_SIZE 100 //default value -  1000 and 10000 for lab evaluation
 
 /*
  * Choose a DDR address that is:

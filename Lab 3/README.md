@@ -167,7 +167,7 @@ y[n] = h0·x[n] + h1·x[n−1] + … + hN·x[n−N]
 ```
 
 <p align="center">
-  <img src="../img/filter.png" alt="Conceptual functionality of convolution" width="650"/>
+  <img src="../img/lab3/filter.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
 <p align="center"><i>Conceptual representation of FIR convolution</i></p>
 

@@ -1,85 +1,91 @@
-# **Lab 4 – Parallel Processing (Dual-Core Vector Addition)**
+# **Lab 4 – Parallel Processing and SIMD Evaluation**
+
+This repository contains the full implementation of **Lab 4** for the
+**Advanced Embedded Systems** course (University of Cagliari).
+
+The project explores **task-level parallelism** on the dual-core ARM Cortex-A9
+of the **Zybo Z7** board and **data-level parallelism (SIMD)** through compiler
+auto-vectorization using **ARM NEON** instructions.
+
+The application performs vector addition both in **serial** and **parallel**
+fashion, measures execution time using the **Global Timer**, and verifies
+correctness through result comparison.
 
 ---
 
 ## **Overview**
 
-This assignment is related to **Lab 4 – Parallel Processing on the Dual-Core ARM Cortex-A9** of the Zybo Z7 board.
+This assignment is related to **Lab 4 – Parallel Processing on a Dual-Core System**.
 
-The goal is to implement a **shared-memory parallel application** where:
+The objective is to implement a **bare-metal shared-memory parallel application**
+where:
 
-1. Core 0 (**Master**) and Core 1 (**Worker**) cooperate
-2. Two input vectors **A** and **B** are stored in DDR shared memory
-3. The two cores compute **C = A + B** in parallel
-4. Workload is split evenly:
+1. **Core 0 (Master)** and **Core 1 (Worker)** cooperate
+2. Two input vectors **A** and **B** are stored in shared DDR memory
+3. The result vector **C = A + B** is computed
+4. The workload is evenly split:
 
-   * Core 0 computes first half
-   * Core 1 computes second half
-5. Synchronization occurs through simple shared flags (`start`, `done0`, `done1`)
-6. Execution time is measured using the **Global Timer**
+   * Core 0 computes the first half
+   * Core 1 computes the second half
+5. Synchronization is achieved through shared flags:
+   `start`, `done0`, `done1`
+6. Execution time is measured using the **ARM Cortex-A9 Global Timer**
+7. A **serial baseline** is executed to evaluate:
 
-This lab introduces low-level **multi-core coordination**, **memory sharing**, and **bare-metal synchronization** without OS support.
+   * parallel speedup
+   * SIMD auto-vectorization effectiveness
 
----
-
-## **Hardware System**
-
-The Vivado hardware platform from previous labs provides:
-
-| Peripheral         | Function                                                   |
-| ------------------ | ---------------------------------------------------------- |
-| `ps7_cortexa9_0`   | ARM Core 0 (Master)                                        |
-| `ps7_cortexa9_1`   | ARM Core 1 (Worker)                                        |
-| `ps7_ddr`          | DDR memory used for shared data structures                 |
-| `ps7_global_timer` | High-resolution timing (67 MHz × 2 = ~333 MHz timer clock) |
-| `axi_gpio`         | Buttons used as start trigger                              |
-| `ps7_uart_1`       | UART console for debug output                              |
-
-Both cores access the same DDR memory region, allowing the implementation of parallel computation with explicit synchronization primitives.
+This lab introduces **low-level multi-core coordination**, **shared-memory
+synchronization**, and **performance evaluation** without OS support.
 
 ---
 
-## **Implementations Summary**
+## **Hardware Platform**
 
-You must produce **two coordinated software applications**:
+The Vivado hardware platform provides:
 
----
+| Peripheral         | Function                           |
+| ------------------ | ---------------------------------- |
+| `ps7_cortexa9_0`   | ARM Core 0 (Master)                |
+| `ps7_cortexa9_1`   | ARM Core 1 (Worker)                |
+| `ps7_ddr`          | Shared DDR memory                  |
+| `ps7_global_timer` | High-resolution timing (≈ 333 MHz) |
+| `axi_gpio`         | Button used as execution trigger   |
+| `ps7_uart_1`       | UART console output                |
 
-### 🔹 **(1) Step 1  – Create Two Application Projects**
-
-Create two SDK/Vitis application projects:
-
-* **Master** → Runs on **Cortex-A9 CPU0**
-* **Worker** → Runs on **Cortex-A9 CPU1**
-
-Rename the main files:
-
-* `master.c`
-* `worker.c`
-
-Both projects must include a shared header:
-
-```
-shared.h
-```
-
-containing:
-
-* Vector sizes
-* Shared memory address
-* Shared structure definition (A, B, C, start, done flags)
+Both cores access the same DDR region, enabling explicit shared-memory
+communication.
 
 ---
 
-### 🔹 **(2) Step 2  – Configure Shared Memory in DDR**
-
-Define a shared memory region at a **fixed DDR address**, e.g.:
+## **Project Structure**
 
 ```
-0x2F100000
+Lab4_ParallelProcessing/
+│
+├── AES/                             → Complete Xilinx SDK workspace
+│   ├── master/                      → CPU0 application project
+│   ├── worker/                      → CPU1 application project
+│   ├── *_bsp/                       → Board Support Packages
+│   └── design_1_wrapper_hw_platform → Exported hardware platform
+│
+├── master.c                         → Core 0: serial + parallel + timing
+├── worker.c                         → Core 1: second-half computation
+├── shared.h                         → Shared DDR structure and flags
+└── README.md                        → Lab documentation (this file)
 ```
 
-Create the shared structure:
+---
+
+## **Shared Memory Organization**
+
+A fixed DDR address is used for shared data:
+
+```c
+#define SHARED_BASE 0x2F100000U
+```
+
+Shared structure definition:
 
 ```c
 typedef struct {
@@ -93,190 +99,326 @@ typedef struct {
 } shared_mem_t;
 ```
 
-Access the structure via:
+Access macro:
 
 ```c
 #define SHARED ((volatile shared_mem_t *)SHARED_BASE)
 ```
 
-**Important:**
-This region must be **excluded from the linker script** of both applications.
+This region is **explicitly excluded from both linker scripts** to prevent
+overlap with `.text`, `.data`, `.bss`, heap, or stack.
 
 ---
 
-### 🔹 **(3) Step 3  – Implement Parallel Vector Addition**
+## **Linker Script Modification**
 
-## **Master (Core 0)**
+In accordance with the laboratory instructions, the linker script
+(`lscript.ld`) was explicitly modified for both applications to ensure
+correct memory mapping in a dual-core shared-memory environment.
 
-* Initializes vectors A and B
-* Resets synchronization flags
-* Waits for button GPIO input
-* Writes `start = 1`
-* Computes the **first half** of vector C
-* Sets `done0 = 1`
-* Waits for `done1` from the Worker
-* Verifies correctness
-* Measures total execution time using the Global Timer
+In particular, the shared DDR region used for inter-core communication
+(starting at address `0x2F100000`) is excluded from all linker-managed
+sections, including:
 
-## **Worker (Core 1)**
+* `.text`
+* `.data`
+* `.bss`
+* heap
+* stack
 
-* Waits for button input (optional)
-* Waits until `start == 1`
-* Computes the **second half** of vector C
+This guarantees that the shared data structure is not overwritten by
+either processor and remains accessible to both cores throughout the
+execution.
+
+---
+
+<p align="center">
+  <img src="../img/lab4/master_lscript.png" width="650"/>
+</p>
+<p align="center"><i>Master linker script (CPU0): all sections placed in ddrCore0, no overlap with shared DDR</i></p>
+
+---
+
+<p align="center">
+  <img src="../img/lab4/worker_lscript.png" width="650"/>
+</p>
+<p align="center"><i>Worker linker script (CPU1): all sections placed in ddrCore1, no overlap with shared DDR</i></p>
+
+---
+
+These modifications follow the memory layout provided in the laboratory
+instructions and are essential to guarantee correct and deterministic
+shared-memory behavior.
+
+---
+
+
+## **Implementation Summary**
+
+### 🔹 **Master – Core 0**
+
+* Disables instruction and data caches
+* Initializes vectors **A** and **B**
+* Executes **serial vector addition** (baseline)
+* Measures serial execution time
+* Clears output vector
+* Triggers Worker via `start = 1`
+* Computes first half of vector **C**
+* Waits for `done1`
+* Measures parallel execution time
+* Computes speedup
+* Verifies correctness against serial output
+
+### 🔹 **Worker – Core 1**
+
+* Disables caches
+* Waits for button trigger
+* Waits for `start == 1`
+* Computes second half of vector **C**
 * Sets `done1 = 1`
+* Enters idle loop
 
 ---
 
-### 🔹 **(4) Step 4 – Modify Linker Scripts**
+## **Serial Baseline (SIMD-Vectorized)**
 
-Edit `lscript.ld` for **both projects**:
+The following serial reference function is executed on Core 0:
 
-* Ensure no `.text`, `.bss`, `.data`, heap, or stack overlaps the shared DDR region (`0x2F100000`)
-* Allow the rest of the code to be placed normally in DDR
+```c
+void vec_add_serial(u32 * restrict c,
+                    const u32 * restrict a,
+                    const u32 * restrict b,
+                    int n)
+{
+    for (int i = 0; i < n; ++i) {
+        c[i] = a[i] + b[i];
+    }
+}
+```
 
-This guarantees that memory used for communication is not overwritten by either core.
+When compiled with NEON-enabled optimization flags, this loop is
+**automatically vectorized** by the compiler.
 
-
-<p align="center">
-  <img src="../img/master_lscript.png" alt="Conceptual functionality of convolution" width="650"/>
-</p>
-<p align="center"><i>Master’s lscript.ld — all sections in ddrCore0, no overlap with shared DDR</i></p>
-
-
-
-<p align="center">
-  <img src="../img/worker_lscript.png" alt="Conceptual functionality of convolution" width="650"/>
-</p>
-<p align="center"><i>Worker’s lscript.ld — all sections in ddrCore1, no overlap with shared DDR</i></p>
 
 ---
 
-### 🔹 **(5) Step 5  – System Debugger Multi-Core Configuration**
+## **Compilation Settings**
 
-Create a **System Debugger** run configuration.
+Both **master** and **worker** projects are compiled with aggressive
+optimization and SIMD auto-vectorization enabled to exploit ARM NEON
+instructions.
 
-### **Target Setup (must be selected):**
+### **Compiler Flags**
+
+```
+
+-mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard
+-std=c99 -mvectorize-with-neon-quad -ftree-vectorize
+-fopt-info-vec-optimized -fopt-info-vec-missed -ffast-math
+
+```
+
+<p align="center">
+  <img src="../img/lab4/master_compiler.png" width="650"/>
+</p>
+<p align="center"><i>Compiler optimization flags for the Master application</i></p>
+
+---
+
+<p align="center">
+  <img src="../img/lab4/worker_compiler.png" width="650"/>
+</p>
+<p align="center"><i>Compiler optimization flags for the Worker application</i></p>
+
+---
+
+### **Linker Flags**
+
+```
+
+-mcpu=cortex-a9 -mfpu=neon -mfloat-abi=hard
+-mvectorize-with-neon-quad -ftree-vectorize
+-Wl,-build-id=none -specs=Xilinx.spec
+
+```
+
+<p align="center">
+  <img src="../img/lab4/master_linker.png" width="650"/>
+</p>
+<p align="center"><i>Linker configuration for the Master application</i></p>
+
+---
+
+<p align="center">
+  <img src="../img/lab4/worker_linker.png" width="650"/>
+</p>
+<p align="center"><i>Linker configuration for the Worker application</i></p>
+
+---
+
+
+## **System Debugger Configuration**
+
+A **System Debugger** run configuration is used.
+
+### **Target Setup**
 
 ✔ Reset entire system
 ✔ Program FPGA
-✔ Run ps7_init
-✔ Run ps7_post_config
+✔ Run `ps7_init`
+✔ Run `ps7_post_config`
 
-### **Application Tab:**
+### **Application Assignment**
 
-Assign ELF files explicitly:
-
-| Processor | ELF          |
+| Processor | ELF file     |
 | --------- | ------------ |
 | CPU0      | `master.elf` |
 | CPU1      | `worker.elf` |
 
-Disable:
+Disabled options:
 
-❌ Reset processor
-❌ Stop at program entry
+- Reset processor
+- Stop at program entry
 
-This allows both cores to run simultaneously from the correct starting point.
+This ensures both cores start simultaneously and correctly.
 
 ---
 
-### 🔹 **(6) Step 6 – Measure Execution Time with Global Timer**
+## **Execution Time Measurement**
 
-Use the cycle counter:
+Timing is performed using the **Global Timer**:
 
 ```c
-u32 t0 = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
-u32 t1 = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+t_start = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+t_end   = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
 ```
 
 Timer frequency:
 
 ```
-CPU clock ≈ 667 MHz
-Global Timer = CPU / 2 ≈ 333 MHz
+Global Timer ≈ 333 MHz
 ```
 
-Compute duration:
+Measured values:
+
+* Serial execution cycles
+* Parallel execution cycles
+* Speedup factor
+
+Measurements are repeated for:
 
 ```
-duration_ticks = t1 - t0
-duration_seconds = duration_ticks / 333e6
+ARRAY_SIZE = 100
+ARRAY_SIZE = 1000
+ARRAY_SIZE = 10000
 ```
 
-Measure the total time required for both cores to compute the full vector.
 
----
-
-
-
-## **Project Structure**
-
-```
-Lab4_ParallelProcessing/
-│
-├── AES/                                → Full Xilinx SDK workspace
-│   ├── master/                         → CPU0 application project
-│   ├── worker/                         → CPU1 application project
-│   ├── *_bsp/                          → Auto-generated BSPs
-│   └── design_1_wrapper_hw_platform    → Exported hardware platform
-│
-├── master.c                            → Core 0: initialization + first half + timing
-├── worker.c                            → Core 1: second half + sync
-├── shared.h                            → Shared DDR structure and flags
-└── README.md                           → Lab documentation (this file)
-```
-
----
-
-## **Implementation Summary**
-
-### 🔹 **Master (Core 0)**
-
-* Setup
-* Initialize A and B
-* Start Worker
-* Compute first half
-* Wait for Worker
-* Validate
-* Print timing
-
-### 🔹 **Worker (Core 1)**
-
-* Wait for start flag
-* Compute second half
-* Signal completion
-
-### 🔹 **Shared Memory**
-
-* Stable DDR address
-* Structure containing all vectors + flags
-
-### 🔹 **Global Timer Measurement**
-
-* High-precision timing
-* Used to evaluate performance scaling
-
----
 
 ## **Output Example**
 
 ---
 <p align="center">
-  <img src="../img/lab4output.png" alt="Conceptual functionality of convolution" width="650"/>
+  <img src="../img/lab4/lab4output.png" alt="Conceptual functionality of convolution" width="650"/>
+</p>
+<p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
+
+---
+
+---
+<p align="center">
+  <img src="../img/lab4/lab4_100.png" alt="Conceptual functionality of convolution" width="650"/>
+</p>
+<p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
+
+---
+---
+<p align="center">
+  <img src="../img/lab4/lab4_1000.png" alt="Conceptual functionality of convolution" width="650"/>
+</p>
+<p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
+
+---
+---
+<p align="center">
+  <img src="../img/lab4/lab4_10000.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
 <p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
 
 ---
 
 
+
+---
+
+## **Observed Results**
+
+* Parallel execution does **not provide significant speedup**
+* The workload is **memory-bound**
+* Both cores contend for the same DDR bandwidth
+* Synchronization overhead is minimal and explains this behavior.
+
+This behavior is expected on shared-memory systems without private caches.
+
+## **Measured Results Summary (Lab 4)**
+
+Execution time measurements were performed using the ARM Cortex-A9 Global Timer
+for both the serial and parallel implementations of the vector addition task.
+
+The following array sizes were considered:
+
+* `ARRAY_SIZE = 100`
+* `ARRAY_SIZE = 1000`
+* `ARRAY_SIZE = 10000`
+
+For all tested configurations, the parallel execution using two cores does not
+provide a significant speedup compared to the serial version. The measured
+execution times are very similar, and in some cases the parallel version is
+slightly slower.
+
+This behavior is expected, since the workload is memory-bound and both cores
+access the same shared DDR memory, resulting in bandwidth contention.
+
+
+---
+## **Assembly Inspection (SIMD Verification)**
+
+The compiled `master.elf` file was inspected using the SDK disassembly view
+to verify the effectiveness of compiler auto-vectorization.
+
+The serial baseline function (`vec_add_serial`) shows the presence of
+**ARM NEON SIMD instructions**, including:
+
+* `vld1.32` – vector load
+* `vadd.i32` – vector addition
+* `vst1.32` – vector store
+
+These instructions confirm that the compiler successfully applied
+**data-level parallelism** through NEON vectorization to the serial loop.
+
+<p align="center">
+  <img src="../img/lab4/master_elf.png" width="650"/>
+</p>
+<p align="center"><i>Disassembly view of <code>master.elf</code> highlighting NEON SIMD instructions</i></p>
+
+---
+
+
+
 ## **Notes**
 
-* Caches are disabled by default to avoid coherency issues
-* DDR shared memory must be chosen carefully
-* Synchronization must be minimal but correct
-* The Worker cannot start before the Master sets `start = 1`
-* Button GPIO ensures both cores begin after the user triggers execution
+* Instruction and data caches are disabled to avoid coherency issues
+* Shared DDR address must not overlap linker-managed regions
+* Synchronization is implemented via busy-wait flags
+* Button GPIO ensures controlled experiment start
+* UART output is kept outside timing-critical sections
 
 ---
 
 *Developed by Lello Molinario*
+
+
+
+
+
+
