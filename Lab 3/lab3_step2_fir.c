@@ -464,7 +464,7 @@ int main()
 
 
 
-    print("\nStarted!\n\r");
+    xil_printf("\nStarted!\n\r");
 
     xil_printf("\n=== LAB3 === Step 2: FIR Filtering ===\n\r");
 

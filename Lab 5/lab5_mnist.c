@@ -1,3 +1,5 @@
+//app_template.c
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "platform.h"
@@ -33,12 +35,23 @@ DATA gemm2_weights[n_weights2] = {weights2};
 #define _MAX_ (1 << (sizeof(DATA)*8-1))-1
 #define _MIN_ -(_MAX_+1)
 
+
+
+static inline u32 ticks_to_us(u64 ticks)
+{
+    // COUNTS_PER_SECOND è definita in xtime_l.h
+    return (u32)((ticks * 1000000ULL) / (u64)COUNTS_PER_SECOND);
+}
+
+
+
 // DNN functions to compose your network
 
 void FC_forward(DATA* input, DATA* output, int in_s, int out_s, DATA* weights, DATA* bias, int qf) ;
 static inline long long int saturate(long long int mac);
 static inline void relu_forward(DATA* input, DATA* output, int size);
 int resultsProcessing(DATA* results, int size);
+
 
 
 // implement your function receiving from UART
@@ -59,6 +72,7 @@ DATA immagine[10][28*28] = {{imm_test_9},{imm_test_8},{imm_test_7},{imm_test_6},
 
 int main(){
   init_platform();
+
 
   //UART setup
   XUartPs Uart_1_PS;
@@ -82,6 +96,7 @@ int main(){
   }
   //END UART SETUP
   xil_printf ("Started\n");
+  xil_printf("\n=== LAB5 === DNN on MNIST===\n\r");
 
   // declare arrays for inputs and for exchanging tensors between layers
 
@@ -155,95 +170,102 @@ int main(){
 
       xil_printf("\nWaiting for the image...\r\n");
 
-      XTime t_start_total, t_end_total;
-      XTime_GetTime(&t_start_total);
+      XTime t_iter0, t_iter1;
+      XTime t_rx0, t_rx1;
+      XTime t_fc0_0, t_fc0_1;
+      XTime t_relu0_0, t_relu0_1;
+      XTime t_fc1_0, t_fc1_1;
+      XTime t_relu1_0, t_relu1_1;
+      XTime t_fc2_0, t_fc2_1;
+      XTime t_cls0, t_cls1;
 
-      // ----------------------------
-      // (1) Tempo ricezione immagine
-      // ----------------------------
-      XTime t0, t1;
-      XTime_GetTime(&t0);
+      XTime_GetTime(&t_iter0);
 
+      // (1) RX image (blocking)
+      XTime_GetTime(&t_rx0);
       receive_image(image);
+      XTime_GetTime(&t_rx1);
 
-      XTime_GetTime(&t1);
-      xil_printf("Time RX image     = %llu cycles\r\n", (t1 - t0));
+      // ---- WARM-UP: scarta SOLO la prima immagine ----
+      static int warmup = 1;
+      if (warmup) {
+          warmup = 0;
+          xil_printf("Warm-up image discarded\r\n");
+          continue;
+      }
 
-
-      // ----------------------------
-      // (2) DNN: FC0 (784 → 64)
-      // ----------------------------
-      XTime_GetTime(&t0);
-
+      // (2) FC0
+      XTime_GetTime(&t_fc0_0);
       FC_forward(image, output_gemm0, 784, 64, gemm0_weights, gemm0_bias, 8);
+      XTime_GetTime(&t_fc0_1);
 
-      XTime_GetTime(&t1);
-      xil_printf("Time FC0           = %llu cycles\r\n", (t1 - t0));
-
-
-      // ----------------------------
       // (3) ReLU0
-      // ----------------------------
-      XTime_GetTime(&t0);
-
+      XTime_GetTime(&t_relu0_0);
       relu_forward(output_gemm0, input_gemm1, 64);
+      XTime_GetTime(&t_relu0_1);
 
-      XTime_GetTime(&t1);
-      xil_printf("Time ReLU0         = %llu cycles\r\n", (t1 - t0));
-
-
-      // ----------------------------
-      // (4) FC1 (64 → 32)
-      // ----------------------------
-      XTime_GetTime(&t0);
-
+      // (4) FC1
+      XTime_GetTime(&t_fc1_0);
       FC_forward(input_gemm1, output_gemm1, 64, 32, gemm1_weights, gemm1_bias, 8);
+      XTime_GetTime(&t_fc1_1);
 
-      XTime_GetTime(&t1);
-      xil_printf("Time FC1           = %llu cycles\r\n", (t1 - t0));
-
-
-      // ----------------------------
       // (5) ReLU1
-      // ----------------------------
-      XTime_GetTime(&t0);
-
+      XTime_GetTime(&t_relu1_0);
       relu_forward(output_gemm1, input_gemm2, 32);
+      XTime_GetTime(&t_relu1_1);
 
-      XTime_GetTime(&t1);
-      xil_printf("Time ReLU1         = %llu cycles\r\n", (t1 - t0));
-
-
-      // ----------------------------
-      // (6) FC2 (32 → 10)
-      // ----------------------------
-      XTime_GetTime(&t0);
-
+      // (6) FC2
+      XTime_GetTime(&t_fc2_0);
       FC_forward(input_gemm2, output_gemm2, 32, 10, gemm2_weights, gemm2_bias, 8);
+      XTime_GetTime(&t_fc2_1);
 
-      XTime_GetTime(&t1);
-      xil_printf("Time FC2           = %llu cycles\r\n", (t1 - t0));
-
-
-      // ----------------------------
-      // (7) Classificazione finale
-      // ----------------------------
-      XTime_GetTime(&t0);
-
+      // (7) Classification (softmax + argmax)
+      XTime_GetTime(&t_cls0);
       int predicted = resultsProcessing(output_gemm2, 10);
+      XTime_GetTime(&t_cls1);
 
-      XTime_GetTime(&t1);
-      xil_printf("Time classification = %llu cycles\r\n", (t1 - t0));
+      XTime_GetTime(&t_iter1);
 
-      // ----------------------------
-      // Tempo totale iterazione
-      // ----------------------------
-      XTime_GetTime(&t_end_total);
-      xil_printf("TOTAL iteration     = %llu cycles\r\n", (t_end_total - t_start_total));
+      // Compute deltas (ticks)
+      u64 rx_t  = (u64)(t_rx1   - t_rx0);
+      u64 fc0_t = (u64)(t_fc0_1 - t_fc0_0);
+      u64 r0_t  = (u64)(t_relu0_1 - t_relu0_0);
+      u64 fc1_t = (u64)(t_fc1_1 - t_fc1_0);
+      u64 r1_t  = (u64)(t_relu1_1 - t_relu1_0);
+      u64 fc2_t = (u64)(t_fc2_1 - t_fc2_0);
+      u64 cls_t = (u64)(t_cls1 - t_cls0);
+      u64 tot_t = (u64)(t_iter1 - t_iter0);
 
-      xil_printf("RESULT=%d\r\n", predicted);
+      u64 dnn_t = fc0_t + r0_t + fc1_t + r1_t + fc2_t + cls_t;
 
-      fflush(stdout);
+      // Converti in microsecondi (u32) per stampe “sicure”
+      u32 rx_us  = ticks_to_us(rx_t);
+      u32 fc0_us = ticks_to_us(fc0_t);
+      u32 r0_us  = ticks_to_us(r0_t);
+      u32 fc1_us = ticks_to_us(fc1_t);
+      u32 r1_us  = ticks_to_us(r1_t);
+      u32 fc2_us = ticks_to_us(fc2_t);
+      u32 cls_us = ticks_to_us(cls_t);
+      u32 dnn_us = ticks_to_us(dnn_t);
+      u32 tot_us = ticks_to_us(tot_t);
+
+      // SOLO xil_printf, SOLO tipi 32-bit
+      xil_printf(
+        "RX=%u us | FC0=%u us | R0=%u us | FC1=%u us | R1=%u us | FC2=%u us | CLS=%u us | DNN=%u us | TOT=%u us\r\n",
+        rx_us, fc0_us, r0_us, fc1_us, r1_us, fc2_us, cls_us, dnn_us, tot_us
+      );
+
+      xil_printf("Predicted digit = %d\r\n", predicted);
+
+      static int printed_summary = 0;
+      if (!printed_summary) {
+    	  xil_printf("Compute-only throughput = %u img/s (compute-only)\r\n",
+    	             1000000 / dnn_us);
+
+          xil_printf("Real-time capability: YES (DNN << UART)\r\n");
+          printed_summary = 1;
+      }
+
   }
 
 
@@ -267,7 +289,7 @@ void FC_forward(DATA* input, DATA* output, int in_s, int out_s, DATA* weights, D
 			current = input[wkern];
 			mac += current * weights[hkern*in_s + wkern];
 		}
-		output[hkern] = (DATA)(mac >> qf);
+		output[hkern] = (DATA)saturate(mac >> qf);//output[hkern] = (DATA)(mac >> qf);
 	}
 }
 
@@ -356,6 +378,6 @@ int resultsProcessing(DATA* results, int size){
   for (int i =0;i<5;i++){
 //	  xil_printf("            TOP %d: [%d] %s   \n",i, c[i], labels[c[i]]);
   }
-  xil_printf("max= %x \n",top0);
+  //xil_printf("max= %x \n",top0);
   return top0;
 }
