@@ -1,39 +1,106 @@
+/***************************************************************
+ *  Lab 5 – DNN on MNIST (Custom Network with Tips– Group 4)
+ *  Author: Lello Molinario
+ *  Board: Zybo Z7 – PS7 (ARM Cortex-A9)
+ *
+ *  Topologia rete custom (gruppo 4):
+ *      FC0: 784  -> 64
+ *      FC1: 64   -> 32
+ *      FC2: 32   -> 16
+ *      FC3: 16   -> 10
+ *
+ *  Formato dati:
+ *      - PesI, bias, attivazioni: DATA = short int (16 bit), Q8.8
+ *      - Ordine byte su UART: little-endian (LSB prima, poi MSB)
+ *
+ *  Protocollo:
+ *      1) All'avvio:
+ *          - il PC invia, in questo ordine:
+ *              FC0 weights (64*784)
+ *              FC0 bias    (64)
+ *              FC1 weights (32*64)
+ *              FC1 bias    (32)
+ *              FC2 weights (16*32)
+ *              FC2 bias    (16)
+ *              FC3 weights (10*16)
+ *              FC3 bias    (10)
+ *      2) Ciclo:
+ *          - il PC invia un'immagine 28x28 (784 campioni Q8.8)
+ *          - la board esegue la DNN
+ *          - invia in UART: RESULT=<digit>
+ *          //     - il PC invia un'immagine 28x28 (784 campioni Q0.8, 1 byte)
+//     - la board ricostruisce Q8.8 on-board (Tip 1)
+ *
+ ***************************************************************/
+
 
 #include <stdio.h>
 #include <stdlib.h>
 #include "platform.h"
 #include "xil_printf.h"
 #include "xuartps.h"
-#include "weights.h"
 #include "test_images.h"
 #include <xtime_l.h>
 #include <time.h>
 
 #include <math.h>
+#include "weights_group4.h"
 
 #define n_bias0 64
-#define n_weights0 50176
+#define n_weights0 50176   // 784*64
+
 #define n_bias1 32
-#define n_weights1 2048
-#define n_bias2 10
-#define n_weights2 320
+#define n_weights1 2048    // 64*32
+
+#define n_bias2 16
+#define n_weights2 512     // 32*16
+
+#define n_bias3 10
+#define n_weights3 160     // 16*10
+
+#define USE_Q0_8_INPUT   0   // 0 = baseline, 1 = Tip 1 Ricorda di usare le immagini per Q0_8
+
+#define USE_Q1_7_WEIGHTS  1   // 0 = baseline Q8.8, 1 = Tip 2 (Q1.7)
+
+
 
 typedef short int DATA;
 
 
-DATA gemm0_bias[n_bias0] = {bias0};
-DATA gemm0_weights[n_weights0] = {weights0} ;
-DATA gemm1_bias[n_bias1] = {bias1};
+#if USE_Q1_7_WEIGHTS
+DATA gemm0_bias[n_bias0]    = {bias0_q17};
+DATA gemm0_weights[n_weights0] = {weights0_q17};
+
+DATA gemm1_bias[n_bias1]    = {bias1_q17};
+DATA gemm1_weights[n_weights1] = {weights1_q17};
+
+DATA gemm2_bias[n_bias2]    = {bias2_q17};
+DATA gemm2_weights[n_weights2] = {weights2_q17};
+
+DATA gemm3_bias[n_bias3]    = {bias3_q17};
+DATA gemm3_weights[n_weights3] = {weights3_q17};
+#else
+DATA gemm0_bias[n_bias0]    = {bias0};
+DATA gemm0_weights[n_weights0] = {weights0};
+
+DATA gemm1_bias[n_bias1]    = {bias1};
 DATA gemm1_weights[n_weights1] = {weights1};
-DATA gemm2_bias[n_bias2] = {bias2};
+
+DATA gemm2_bias[n_bias2]    = {bias2};
 DATA gemm2_weights[n_weights2] = {weights2};
+
+DATA gemm3_bias[n_bias3]    = {bias3};
+DATA gemm3_weights[n_weights3] = {weights3};
+#endif
+
+
+
 
 #define FIXED2FLOAT(a, qf) (((float) (a)) / (1<<qf))
 #define FLOAT2FIXED(a, qf) ((short int) round((a) * (1<<qf)))
 
 #define _MAX_ (1 << (sizeof(DATA)*8-1))-1
 #define _MIN_ -(_MAX_+1)
-
 
 
 static inline u32 ticks_to_us(u64 ticks)
@@ -60,11 +127,27 @@ DATA readfromUART(){ // reads 2 bytes and composes a short int
     return (DATA)((hi << 8) | lo);
 }
 
+
+#define SYNC_BYTE 0xA5
+
 void receive_image(DATA *buffer) {
-    for(int i = 0; i < 784; i++) {
+
+
+
+#if USE_Q0_8_INPUT
+    for (int i = 0; i < 784; i++) {
+        u8 v = XUartPs_RecvByte(XPAR_PS7_UART_1_BASEADDR);
+        buffer[i] = ((DATA)v) << 8;   // Q0.8 → Q8.8
+
+    }
+#else
+    for (int i = 0; i < 784; i++) {
         buffer[i] = readfromUART();
     }
+#endif
 }
+
+
 
 DATA immagine[10][28*28] = {{imm_test_9},{imm_test_8},{imm_test_7},{imm_test_6},{imm_test_5},{imm_test_4},{imm_test_3},{imm_test_2},{imm_test_1},{imm_test_0}};
 
@@ -96,16 +179,40 @@ int main(){
   //END UART SETUP
   xil_printf ("Started\n");
   xil_printf("\n=== LAB5 === DNN on MNIST===\n\r");
+  xil_printf("\n=== Custom with Tips ===\n\r");
+
+  xil_printf("\n--- CONFIGURATION ---\n\r");
+
+  #if USE_Q0_8_INPUT
+  xil_printf("Input format      : Q0.8 (Tip 1 ENABLED)\n\r");
+  #else
+  xil_printf("Input format      : Q8.8 (Baseline)\n\r");
+  #endif
+
+  #if USE_Q1_7_WEIGHTS
+  xil_printf("Weights/Bias      : Q1.7 (Tip 2 ENABLED)\n\r");
+  #else
+  xil_printf("Weights/Bias      : Q8.8 (Baseline)\n\r");
+  #endif
+
+  xil_printf("---------------------\n\r\n");
+
 
   // declare arrays for inputs and for exchanging tensors between layers
 
   DATA image[28*28];  // buffer immagine ricevuta via UART
 
   DATA output_gemm0[64];
-  DATA  input_gemm1[64];
+  DATA input_gemm1[64];
+
   DATA output_gemm1[32];
-  DATA  input_gemm2[32];
-  DATA output_gemm2[10];
+  DATA input_gemm2[32];
+
+  DATA output_gemm2[16];
+  DATA input_gemm3[16];
+
+  DATA output_gemm3[10];
+
 
   // ================================
   // STEP 1 – Test della DNN con immagini statiche
@@ -141,19 +248,34 @@ int main(){
       // ReLU 1
       relu_forward(output_gemm1, input_gemm2, 32);
 
-      // Layer 2: FC 32 → 10
+      // Layer 2: FC 32 → 16
       FC_forward(
           input_gemm2,
           output_gemm2,
           32,
-          10,
+          16,
           gemm2_weights,
           gemm2_bias,
           8
       );
 
+      // ReLU 2
+      relu_forward(output_gemm2, input_gemm3, 16);
+
+
+      // Layer 3: FC 16 → 10
+      FC_forward(
+          input_gemm3,
+          output_gemm3,
+          16,
+          10,
+          gemm3_weights,
+          gemm3_bias,
+          8
+      );
+
       // Classificazione finale
-      int predicted = resultsProcessing(output_gemm2, 10);
+      int predicted = resultsProcessing(output_gemm3, 10);
       xil_printf("Predicted digit = %d\r\n", predicted);
   }
 
@@ -176,6 +298,8 @@ int main(){
       XTime t_fc1_0, t_fc1_1;
       XTime t_relu1_0, t_relu1_1;
       XTime t_fc2_0, t_fc2_1;
+      XTime t_fc3_0, t_fc3_1;
+      XTime t_relu2_0, t_relu2_1;
       XTime t_cls0, t_cls1;
 
       XTime_GetTime(&t_iter0);
@@ -185,6 +309,13 @@ int main(){
       receive_image(image);
       XTime_GetTime(&t_rx1);
 
+      // === DEBUG: verifica contenuto immagine ricevuta ===
+      //xil_printf("First 10 pixels: ");
+      //for (int i = 0; i < 10; i++) {
+      //    xil_printf("%d ", image[i]);
+      //}
+      xil_printf("\r\n");
+
       // ---- WARM-UP: scarta SOLO la prima immagine ----
       static int warmup = 1;
       if (warmup) {
@@ -192,6 +323,9 @@ int main(){
           xil_printf("Warm-up image discarded\r\n");
           continue;
       }
+
+
+
 
       // (2) FC0
       XTime_GetTime(&t_fc0_0);
@@ -213,15 +347,26 @@ int main(){
       relu_forward(output_gemm1, input_gemm2, 32);
       XTime_GetTime(&t_relu1_1);
 
-      // (6) FC2
+      // (6) FC2: 32 → 16
       XTime_GetTime(&t_fc2_0);
-      FC_forward(input_gemm2, output_gemm2, 32, 10, gemm2_weights, gemm2_bias, 8);
+      FC_forward(input_gemm2, output_gemm2, 32, 16, gemm2_weights, gemm2_bias, 8);
       XTime_GetTime(&t_fc2_1);
 
-      // (7) Classification (softmax + argmax)
+      // (7) ReLU2: 16
+      XTime_GetTime(&t_relu2_0);
+      relu_forward(output_gemm2, input_gemm3, 16);
+      XTime_GetTime(&t_relu2_1);
+
+      // (8) FC3: 16 → 10
+      XTime_GetTime(&t_fc3_0);
+      FC_forward(input_gemm3, output_gemm3, 16, 10, gemm3_weights, gemm3_bias, 8);
+      XTime_GetTime(&t_fc3_1);
+
+      // (9) Classification (softmax + argmax)
       XTime_GetTime(&t_cls0);
-      int predicted = resultsProcessing(output_gemm2, 10);
+      int predicted = resultsProcessing(output_gemm3, 10);
       XTime_GetTime(&t_cls1);
+
 
       XTime_GetTime(&t_iter1);
 
@@ -234,8 +379,12 @@ int main(){
       u64 fc2_t = (u64)(t_fc2_1 - t_fc2_0);
       u64 cls_t = (u64)(t_cls1 - t_cls0);
       u64 tot_t = (u64)(t_iter1 - t_iter0);
+      u64 fc3_t = (u64)(t_fc3_1 - t_fc3_0);
+      u64 r2_t  = (u64)(t_relu2_1 - t_relu2_0);
 
-      u64 dnn_t = fc0_t + r0_t + fc1_t + r1_t + fc2_t + cls_t;
+      u64 dnn_t = fc0_t + r0_t + fc1_t + r1_t + fc2_t + r2_t + fc3_t + cls_t;
+
+
 
       // Converti in microsecondi (u32) per stampe “sicure”
       u32 rx_us  = ticks_to_us(rx_t);
@@ -247,11 +396,12 @@ int main(){
       u32 cls_us = ticks_to_us(cls_t);
       u32 dnn_us = ticks_to_us(dnn_t);
       u32 tot_us = ticks_to_us(tot_t);
+      u32 fc3_us = ticks_to_us(fc3_t);
+      u32 r2_us  = ticks_to_us(r2_t);
 
-      // SOLO xil_printf, SOLO tipi 32-bit
       xil_printf(
-        "RX=%u us | FC0=%u us | R0=%u us | FC1=%u us | R1=%u us | FC2=%u us | CLS=%u us | DNN=%u us | TOT=%u us\r\n",
-        rx_us, fc0_us, r0_us, fc1_us, r1_us, fc2_us, cls_us, dnn_us, tot_us
+        "RX=%u us | FC0=%u us | R0=%u us | FC1=%u us | R1=%u us | FC2=%u us | R2=%u us | FC3=%u us | CLS=%u us | DNN=%u us | TOT=%u us\r\n",
+        rx_us, fc0_us, r0_us, fc1_us, r1_us, fc2_us, r2_us, fc3_us, cls_us, dnn_us, tot_us
       );
 
       xil_printf("Predicted digit = %d\r\n", predicted);
