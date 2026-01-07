@@ -1,50 +1,62 @@
 /***************************************************************
- *  Lab 5 – DNN on MNIST (Custom Network with Tips– Group 4)
+ *  Lab 5 – DNN on MNIST (Custom Network with Tips – Group 4)
+ *  ------------------------------------------------------------
+ *  File: main_custom.c
+ *
  *  Author: Lello Molinario
- *  Board: Zybo Z7 – PS7 (ARM Cortex-A9)
+ *  University of Cagliari – Advanced Embedded Systems (AES)
+ *  Academic Year: 2025–2026
  *
- *  Topologia rete custom (gruppo 4):
- *      FC0: 784  -> 64
- *      FC1: 64   -> 32
- *      FC2: 32   -> 16
- *      FC3: 16   -> 10
  *
- *  Formato dati:
- *      - PesI, bias, attivazioni: DATA = short int (16 bit), Q8.8
- *      - Ordine byte su UART: little-endian (LSB prima, poi MSB)
+ *  Network Topology (Custom – Group 4):
+ *    • FC0: 784 → 64
+ *    • FC1: 64  → 32
+ *    • FC2: 32  → 16
+ *    • FC3: 16  → 10
  *
- *  Protocollo:
- *      1) All'avvio:
- *          - il PC invia, in questo ordine:
- *              FC0 weights (64*784)
- *              FC0 bias    (64)
- *              FC1 weights (32*64)
- *              FC1 bias    (32)
- *              FC2 weights (16*32)
- *              FC2 bias    (16)
- *              FC3 weights (10*16)
- *              FC3 bias    (10)
- *      2) Ciclo:
- *          - il PC invia un'immagine 28x28 (784 campioni Q8.8)
- *          - la board esegue la DNN
- *          - invia in UART: RESULT=<digit>
- *          //     - il PC invia un'immagine 28x28 (784 campioni Q0.8, 1 byte)
-//     - la board ricostruisce Q8.8 on-board (Tip 1)
+ *  Data Representation:
+ *    • Weights, bias, activations: DATA = int16 (fixed-point)
+ *    • Baseline format: Q8.8
+ *    • Tip 1: input images in Q0.8 (1 byte) reconstructed on-board
+ *    • Tip 2: weights/bias in Q1.7 for improved dynamic range
+ *
+ *  UART Protocol:
+ *    1) Startup (optional offline loading):
+ *       - FC0 weights (64×784), bias (64)
+ *       - FC1 weights (32×64),  bias (32)
+ *       - FC2 weights (16×32),  bias (16)
+ *       - FC3 weights (10×16),  bias (10)
+ *
+ *    2) Runtime loop:
+ *       - PC sends one 28×28 image (784 samples)
+ *       - Board executes DNN inference
+ *       - Board returns RESULT=<digit> over UART
+ *
+ *  Measurement:
+ *    • Cycle-level timing via ARM Global Timer
+ *    • Per-layer profiling (FC + ReLU)
+ *    • Compute-only throughput evaluation
  *
  ***************************************************************/
 
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
+
 #include "platform.h"
 #include "xil_printf.h"
 #include "xuartps.h"
-#include "test_images.h"
-#include <xtime_l.h>
-#include <time.h>
+#include "xtime_l.h"
+#include "time.h"
 
-#include <math.h>
+#include "test_images.h"
 #include "weights_group4.h"
+
+
+/* ============================================================
+ * NETWORK DIMENSIONS
+ * ============================================================ */
 
 #define n_bias0 64
 #define n_weights0 50176   // 784*64
@@ -58,15 +70,23 @@
 #define n_bias3 10
 #define n_weights3 160     // 16*10
 
-#define USE_Q0_8_INPUT   0   // 0 = baseline, 1 = Tip 1 Ricorda di usare le immagini per Q0_8
+/* ============================================================
+ * CONFIGURATION FLAGS (TIPS)
+ * ============================================================ */
+/* Tip 1: receive input images in Q0.8 (1 byte) */
 
-#define USE_Q1_7_WEIGHTS  1   // 0 = baseline Q8.8, 1 = Tip 2 (Q1.7)
+#define USE_Q0_8_INPUT   0   // 0 = baseline Q8.8, 1 = Tip 1
+
+/* Tip 2: use weights/bias in Q1.7 instead of Q8.8 */
+#define USE_Q1_7_WEIGHTS  1   // 0 = baseline, 1 = Tip 2
 
 
-
+/* Fixed-point data type */
 typedef short int DATA;
 
-
+/* ============================================================
+ * WEIGHTS AND BIASES SELECTION
+ * ============================================================ */
 #if USE_Q1_7_WEIGHTS
 DATA gemm0_bias[n_bias0]    = {bias0_q17};
 DATA gemm0_weights[n_weights0] = {weights0_q17};
@@ -95,7 +115,9 @@ DATA gemm3_weights[n_weights3] = {weights3};
 
 
 
-
+/* ============================================================
+ * FIXED-POINT UTILITIES
+ * ============================================================ */
 #define FIXED2FLOAT(a, qf) (((float) (a)) / (1<<qf))
 #define FLOAT2FIXED(a, qf) ((short int) round((a) * (1<<qf)))
 
@@ -111,7 +133,9 @@ static inline u32 ticks_to_us(u64 ticks)
 
 
 
-// DNN functions to compose your network
+/* ============================================================
+ * DNN FUNCTION PROTOTYPES
+ * ============================================================ */
 
 void FC_forward(DATA* input, DATA* output, int in_s, int out_s, DATA* weights, DATA* bias, int qf) ;
 static inline long long int saturate(long long int mac);
@@ -119,8 +143,9 @@ static inline void relu_forward(DATA* input, DATA* output, int size);
 int resultsProcessing(DATA* results, int size);
 
 
-
-// implement your function receiving from UART
+/* ============================================================
+ * UART IMAGE RECEPTION
+ * ============================================================ */
 DATA readfromUART(){ // reads 2 bytes and composes a short int
     u8 lo = XUartPs_RecvByte(XPAR_PS7_UART_1_BASEADDR); // first byte (LSB)
     u8 hi = XUartPs_RecvByte(XPAR_PS7_UART_1_BASEADDR); // second byte (MSB)
@@ -130,17 +155,21 @@ DATA readfromUART(){ // reads 2 bytes and composes a short int
 
 #define SYNC_BYTE 0xA5
 
+
+/* Receive a full MNIST image (784 pixels) */
 void receive_image(DATA *buffer) {
 
 
 
 #if USE_Q0_8_INPUT
+    /* Tip 1: Q0.8 input → reconstructed to Q8.8 */
     for (int i = 0; i < 784; i++) {
         u8 v = XUartPs_RecvByte(XPAR_PS7_UART_1_BASEADDR);
         buffer[i] = ((DATA)v) << 8;   // Q0.8 → Q8.8
 
     }
 #else
+    /* Baseline: direct Q8.8 reception */
     for (int i = 0; i < 784; i++) {
         buffer[i] = readfromUART();
     }
@@ -148,15 +177,19 @@ void receive_image(DATA *buffer) {
 }
 
 
-
+/* Static test images for functional validation */
 DATA immagine[10][28*28] = {{imm_test_9},{imm_test_8},{imm_test_7},{imm_test_6},{imm_test_5},{imm_test_4},{imm_test_3},{imm_test_2},{imm_test_1},{imm_test_0}};
 
-
+/* ============================================================
+ * MAIN APPLICATION
+ * ============================================================ */
 int main(){
   init_platform();
 
 
-  //UART setup
+    /* --------------------------------------------------------
+     * UART INITIALIZATION
+     * -------------------------------------------------------- */
   XUartPs Uart_1_PS;
   u16 DeviceId_1= XPAR_PS7_UART_1_DEVICE_ID;
   int Status_1;
@@ -198,7 +231,10 @@ int main(){
   xil_printf("---------------------\n\r\n");
 
 
-  // declare arrays for inputs and for exchanging tensors between layers
+
+    /* --------------------------------------------------------
+     * Tensor buffers between layers
+     * -------------------------------------------------------- */
 
   DATA image[28*28];  // buffer immagine ricevuta via UART
 
@@ -214,9 +250,9 @@ int main(){
   DATA output_gemm3[10];
 
 
-  // ================================
-  // STEP 1 – Test della DNN con immagini statiche
-  // ================================
+    /* ========================================================
+     * STEP 1 – Functional validation with static images
+     * ======================================================== */
   for (int i = 0; i < 10; i++) {
       xil_printf("\r\n===== Test image %d =====\r\n", 9 - i);
 
@@ -280,13 +316,9 @@ int main(){
   }
 
 
-  // for the UART-based implementation:
-  //read weights and bias
-
-  // ================================
-  // STEP 2 – 3 – 4
-  // Ciclo continuo con misura dei tempi
-  // ================================
+    /* ========================================================
+     * STEP 2–3–4 – Real-time inference with profiling
+     * ======================================================== */
   while (1) {
 
       xil_printf("\nWaiting for the image...\r\n");
@@ -309,14 +341,14 @@ int main(){
       receive_image(image);
       XTime_GetTime(&t_rx1);
 
-      // === DEBUG: verifica contenuto immagine ricevuta ===
+      // === DEBUG: verify received image ===
       //xil_printf("First 10 pixels: ");
       //for (int i = 0; i < 10; i++) {
       //    xil_printf("%d ", image[i]);
       //}
       xil_printf("\r\n");
 
-      // ---- WARM-UP: scarta SOLO la prima immagine ----
+        /* Discard first iteration (warm-up) */
       static int warmup = 1;
       if (warmup) {
           warmup = 0;
@@ -326,7 +358,7 @@ int main(){
 
 
 
-
+        /* Forward pass */
       // (2) FC0
       XTime_GetTime(&t_fc0_0);
       FC_forward(image, output_gemm0, 784, 64, gemm0_weights, gemm0_bias, 8);
@@ -386,7 +418,7 @@ int main(){
 
 
 
-      // Converti in microsecondi (u32) per stampe “sicure”
+      // Conversion in microsecond (u32) per "safe" print
       u32 rx_us  = ticks_to_us(rx_t);
       u32 fc0_us = ticks_to_us(fc0_t);
       u32 r0_us  = ticks_to_us(r0_t);
@@ -399,6 +431,7 @@ int main(){
       u32 fc3_us = ticks_to_us(fc3_t);
       u32 r2_us  = ticks_to_us(r2_t);
 
+      // Only xil_printf, only 32-bit
       xil_printf(
         "RX=%u us | FC0=%u us | R0=%u us | FC1=%u us | R1=%u us | FC2=%u us | R2=%u us | FC3=%u us | CLS=%u us | DNN=%u us | TOT=%u us\r\n",
         rx_us, fc0_us, r0_us, fc1_us, r1_us, fc2_us, r2_us, fc3_us, cls_us, dnn_us, tot_us
@@ -422,7 +455,9 @@ int main(){
     return 0;
 }
 
-
+/* ============================================================
+ * FULLY CONNECTED LAYER (Fixed-Point)
+ * ============================================================ */
 void FC_forward(DATA* input, DATA* output, int in_s, int out_s, DATA* weights, DATA* bias, int qf) {
 	// NOTE return W * x
 	int hkern = 0;

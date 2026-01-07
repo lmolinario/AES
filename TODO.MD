@@ -1,7 +1,3 @@
-LAB 4
----
-scrivere header ai file
-
 LAB 5
 ---
 

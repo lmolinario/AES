@@ -1,15 +1,54 @@
+/***************************************************************
+ *  Lab 5 – DNN on MNIST (Fixed-Point Inference on ARM Cortex-A9)
+ *  ------------------------------------------------------------
+ *  File: main.c
+ *
+ *  Author: Lello Molinario
+ *  University of Cagliari – Advanced Embedded Systems (AES)
+ *  Academic Year: 2025–2026
+ *
+
+ *
+ *  Description:
+ *  ------------------------------------------------------------
+ *  This application implements a fully-connected Deep Neural
+ *  Network (DNN) for handwritten digit recognition (MNIST)
+ *  running on the ARM Cortex-A9 Processing System.
+ *
+ *  Network topology:
+ *    • FC0: 784  → 64
+ *    • FC1: 64   → 32
+ *    • FC2: 32   → 10
+ *
+ *  Key features:
+ *    • Fixed-point arithmetic (Q8.8)
+ *    • Software-only inference (no accelerators)
+ *    • UART-based image streaming
+ *    • Cycle-level timing using ARM Global Timer
+ *
+ *  The application is structured in multiple steps:
+ *    1) Functional validation using static test images
+ *    2) Real-time inference with images received via UART
+ *    3) Fine-grained execution-time analysis per layer
+ *
+ ***************************************************************/
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
+
 #include "platform.h"
 #include "xil_printf.h"
 #include "xuartps.h"
+#include "xtime_l.h"
+#include "xil_types.h"
+
 #include "weights.h"
 #include "test_images.h"
-#include <xtime_l.h>
-#include <time.h>
 
-#include <math.h>
+/* ============================================================
+ * NETWORK PARAMETERS
+ * ============================================================ */
 
 #define n_bias0 64
 #define n_weights0 50176
@@ -18,9 +57,12 @@
 #define n_bias2 10
 #define n_weights2 320
 
+/* Fixed-point data type (Q8.8) */
 typedef short int DATA;
 
-
+/* ============================================================
+ * NETWORK PARAMETERS (WEIGHTS & BIASES)
+ * ============================================================ */
 DATA gemm0_bias[n_bias0] = {bias0};
 DATA gemm0_weights[n_weights0] = {weights0} ;
 DATA gemm1_bias[n_bias1] = {bias1};
@@ -28,6 +70,9 @@ DATA gemm1_weights[n_weights1] = {weights1};
 DATA gemm2_bias[n_bias2] = {bias2};
 DATA gemm2_weights[n_weights2] = {weights2};
 
+/* ============================================================
+ * FIXED-POINT UTILITIES
+ * ============================================================ */
 #define FIXED2FLOAT(a, qf) (((float) (a)) / (1<<qf))
 #define FLOAT2FIXED(a, qf) ((short int) round((a) * (1<<qf)))
 
@@ -35,45 +80,55 @@ DATA gemm2_weights[n_weights2] = {weights2};
 #define _MIN_ -(_MAX_+1)
 
 
-
+/* Convert Global Timer ticks to microseconds */
 static inline u32 ticks_to_us(u64 ticks)
 {
-    // COUNTS_PER_SECOND è definita in xtime_l.h
+    // COUNTS_PER_SECOND is defined in xtime_l.h
     return (u32)((ticks * 1000000ULL) / (u64)COUNTS_PER_SECOND);
 }
 
 
-
-// DNN functions to compose your network
-
+/* ============================================================
+ * DNN FUNCTION PROTOTYPES
+ * ============================================================ */
 void FC_forward(DATA* input, DATA* output, int in_s, int out_s, DATA* weights, DATA* bias, int qf) ;
 static inline long long int saturate(long long int mac);
 static inline void relu_forward(DATA* input, DATA* output, int size);
 int resultsProcessing(DATA* results, int size);
 
+/* ============================================================
+ * UART IMAGE RECEPTION
+ * ============================================================ */
 
-
-// implement your function receiving from UART
-DATA readfromUART(){ // reads 2 bytes and composes a short int
+/* Read one fixed-point pixel from UART (2 bytes, little-endian) */
+DATA readfromUART(){ /
     u8 lo = XUartPs_RecvByte(XPAR_PS7_UART_1_BASEADDR); // first byte (LSB)
     u8 hi = XUartPs_RecvByte(XPAR_PS7_UART_1_BASEADDR); // second byte (MSB)
     return (DATA)((hi << 8) | lo);
 }
 
+
+/* Receive a full MNIST image (28×28 = 784 pixels) */
 void receive_image(DATA *buffer) {
     for(int i = 0; i < 784; i++) {
         buffer[i] = readfromUART();
     }
 }
 
+/* Static test images used for functional validation */
 DATA immagine[10][28*28] = {{imm_test_9},{imm_test_8},{imm_test_7},{imm_test_6},{imm_test_5},{imm_test_4},{imm_test_3},{imm_test_2},{imm_test_1},{imm_test_0}};
 
 
+/* ============================================================
+ * MAIN APPLICATION
+ * ============================================================ */
 int main(){
   init_platform();
 
 
-  //UART setup
+    /* --------------------------------------------------------
+     * UART INITIALIZATION
+     * -------------------------------------------------------- */
   XUartPs Uart_1_PS;
   u16 DeviceId_1= XPAR_PS7_UART_1_DEVICE_ID;
   int Status_1;
@@ -97,7 +152,9 @@ int main(){
   xil_printf ("Started\n");
   xil_printf("\n=== LAB5 === DNN on MNIST===\n\r");
 
-  // declare arrays for inputs and for exchanging tensors between layers
+    /* --------------------------------------------------------
+     * Tensor buffers between layers
+     * -------------------------------------------------------- */
 
   DATA image[28*28];  // buffer immagine ricevuta via UART
 
@@ -107,9 +164,9 @@ int main(){
   DATA  input_gemm2[32];
   DATA output_gemm2[10];
 
-  // ================================
-  // STEP 1 – Test della DNN con immagini statiche
-  // ================================
+    /* ========================================================
+     * STEP 1 – Functional test with static images
+     * ======================================================== */
   for (int i = 0; i < 10; i++) {
       xil_printf("\r\n===== Test image %d =====\r\n", 9 - i);
 
@@ -152,19 +209,15 @@ int main(){
           8
       );
 
-      // Classificazione finale
+      // Final Classification
       int predicted = resultsProcessing(output_gemm2, 10);
       xil_printf("Predicted digit = %d\r\n", predicted);
   }
 
 
-  // for the UART-based implementation:
-  //read weights and bias
-
-  // ================================
-  // STEP 2 – 3 – 4
-  // Ciclo continuo con misura dei tempi
-  // ================================
+    /* ========================================================
+     * STEP 2 – Real-time inference with timing analysis
+     * ======================================================== */
   while (1) {
 
       xil_printf("\nWaiting for the image...\r\n");
@@ -184,8 +237,9 @@ int main(){
       XTime_GetTime(&t_rx0);
       receive_image(image);
       XTime_GetTime(&t_rx1);
+      XTime_GetTime(&t_fc0_0);
 
-      // ---- WARM-UP: scarta SOLO la prima immagine ----
+        /* Warm-up iteration discarded (cache, branch predictors) */
       static int warmup = 1;
       if (warmup) {
           warmup = 0;
@@ -193,8 +247,7 @@ int main(){
           continue;
       }
 
-      // (2) FC0
-      XTime_GetTime(&t_fc0_0);
+      /* Forward pass */
       FC_forward(image, output_gemm0, 784, 64, gemm0_weights, gemm0_bias, 8);
       XTime_GetTime(&t_fc0_1);
 
@@ -237,7 +290,7 @@ int main(){
 
       u64 dnn_t = fc0_t + r0_t + fc1_t + r1_t + fc2_t + cls_t;
 
-      // Converti in microsecondi (u32) per stampe “sicure”
+      // Conversion in microsecond (u32) per "safe" print
       u32 rx_us  = ticks_to_us(rx_t);
       u32 fc0_us = ticks_to_us(fc0_t);
       u32 r0_us  = ticks_to_us(r0_t);
@@ -248,7 +301,7 @@ int main(){
       u32 dnn_us = ticks_to_us(dnn_t);
       u32 tot_us = ticks_to_us(tot_t);
 
-      // SOLO xil_printf, SOLO tipi 32-bit
+      // Only xil_printf, only 32-bit
       xil_printf(
         "RX=%u us | FC0=%u us | R0=%u us | FC1=%u us | R1=%u us | FC2=%u us | CLS=%u us | DNN=%u us | TOT=%u us\r\n",
         rx_us, fc0_us, r0_us, fc1_us, r1_us, fc2_us, cls_us, dnn_us, tot_us
