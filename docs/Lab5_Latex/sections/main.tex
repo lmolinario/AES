@@ -67,6 +67,14 @@ Such an execution environment is particularly suitable for performance evaluatio
 and low-level optimization tasks, which are central topics in Advanced Embedded
 Systems.
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{images/xilink}
+    \caption{Xilinx Software Development Kit (SDK) environment used for embedded application development.}
+    \label{fig:xilinx_sdk}
+\end{figure}
+
+
 Communication between the host computer and the embedded platform is performed via
 UART.
 This interface is used to stream input images to the board and to transmit the
@@ -74,6 +82,12 @@ classification results back to the host.
 The UART-based communication scheme reflects a realistic scenario for embedded
 systems, where external data sources are often connected through low-bandwidth
 serial interfaces.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{images/realterm}
+    \caption{RealTerm serial/TCP terminal, specifically designed for transmitting binary and non-printable data streams}
+    \label{fig:realterm}
+\end{figure}
 
 All timing measurements presented in this work are obtained using the 64-bit ARM
 Global Timer available in the Processing System.
@@ -106,6 +120,14 @@ feature vector.
 
 The input to the network is a grayscale MNIST image of size $28 \times 28$ pixels,
 which is flattened into a vector of 784 elements.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{images/test_image}
+    \caption{Example of a MNIST handwritten digit image used as input for the DNN inference}
+    \label{fig:mnist}
+\end{figure}
+
 This vector is then processed by a sequence of fully connected layers with decreasing
 dimensionality, followed by non-linear activation functions.
 
@@ -119,6 +141,8 @@ In particular, the baseline network consists of the following layers:
 Each intermediate fully connected layer is followed by a ReLU activation function,
 while the output layer produces a vector of 10 scores corresponding to the digit
 classes from 0 to 9.
+
+
 This architecture represents a simple yet effective reference model for MNIST
 classification and is well suited for implementation on embedded systems due to its
 regular structure and predictable memory access patterns.
@@ -194,7 +218,7 @@ and explicit control over numerical precision and overflow behavior.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{images/lab5_math.png}
+    \includegraphics[width=0.7\textwidth]{images/lab5_math.png}
     \caption{Fixed-point computation and accumulation in fully connected layers.}
     \label{fig:fixed_point_math}
 \end{figure}
@@ -340,26 +364,61 @@ standalone embedded applications, where deterministic behavior is required.
 
 \section{Measurement Methodology}
 
-Execution time is measured by reading the Global Timer counter before and after
-specific code sections.
-All measurements are expressed in clock cycles and subsequently converted to
-microseconds using the known timer frequency.
+Execution time measurements are performed using the 64-bit ARM Global Timer
+available in the Processing System of the Zynq-7000 SoC.
+The Global Timer provides a free-running cycle counter incremented at a fixed
+frequency, allowing precise cycle-level timing without software overhead.
 
-The inference loop is instrumented to measure the execution time of the following
-stages:
+In the implemented code, timing is obtained by reading the Global Timer counter
+immediately before and after specific code regions using the \texttt{XTime\_GetTime()}
+function.
+The difference between the two readings directly represents the number of elapsed
+clock cycles for the measured code section.
+Cycle counts are subsequently converted to time values using the known timer
+frequency.
+
+The main inference loop is explicitly instrumented to measure the execution time
+of the following stages:
 \begin{itemize}
-    \item image reception via UART,
-    \item execution of each fully connected layer,
-    \item execution of activation functions,
-    \item final classification and result processing,
-    \item total iteration time.
+    \item UART-based image reception, measured by placing timer reads around the
+          blocking receive loop;
+    \item execution of each fully connected layer, measured by wrapping the
+          corresponding nested multiply--accumulate loops;
+    \item execution of activation functions (ReLU), measured independently from
+          the fully connected layers;
+    \item final classification and result processing, including argmax selection
+          and optional softmax computation;
+    \item total iteration time, measured by enclosing the entire inference cycle
+          within a single timing window.
 \end{itemize}
 
-To avoid distortions due to cache cold-start effects and branch predictor
-initialization, the first iteration of the inference loop is discarded.
-This warm-up phase ensures that subsequent measurements reflect steady-state
-execution conditions.
+To ensure that the reported measurements reflect steady-state execution behavior,
+the first iteration of the inference loop is explicitly discarded.
+This warm-up iteration allows instruction caches, data caches, and branch
+predictors to reach a stable state, avoiding artificially inflated timing results
+due to cold-start effects.
 
+All subsequent measurements are therefore representative of the deterministic
+execution conditions encountered during continuous real-time operation of the
+DNN microserver.
+
+In previous laboratories, execution time was measured by placing timer reads
+immediately before and after the invocation of a single computational kernel,
+such as a vector addition or a FIR filtering function.
+This approach is well suited for isolated and self-contained computations.
+
+In this laboratory, however, the objective is to measure the execution time of a
+complete inference pipeline, composed of multiple sequential stages including
+UART reception, fixed-point DNN inference, activation functions, and result
+processing.
+As a result, timing cannot be limited to a single function call, but must be
+distributed across different sections of the code.
+
+For this reason, the timing approach based on a single start--end measurement
+around one function call is not sufficient.
+Instead, the Global Timer is read at multiple points in the code in order to
+profile each stage of the pipeline independently and to clearly separate
+communication time from computation time.
 
 
 
