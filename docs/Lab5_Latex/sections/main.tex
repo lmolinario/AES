@@ -127,7 +127,7 @@ Figure~\ref{fig:onnx_base} shows the baseline DNN topology as visualized using N
 
 \begin{figure}[!H]
     \centering
-    \includegraphics[width=0.3\textwidth]{images/onnx_model.png}
+    \includegraphics[width=0.3\textwidth]{images/onnx_model}
     \caption{Baseline MNIST DNN topology visualized with Netron.}
     \label{fig:onnx_base}
 \end{figure}
@@ -191,6 +191,13 @@ systems, where limited computational resources and real-time constraints make
 floating-point operations less desirable.
 In this work, fixed-point representation enables deterministic execution times
 and explicit control over numerical precision and overflow behavior.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{images/lab5_math.png}
+    \caption{Fixed-point computation and accumulation in fully connected layers.}
+    \label{fig:fixed_point_math}
+\end{figure}
 
 \section{Data Representation and Q-Format}
 
@@ -270,6 +277,7 @@ executing the neural network inference, and returning the classification result.
 A UART-based communication interface is used to stream MNIST images to the
 embedded platform.
 
+
 \section{Input Streaming}
 
 MNIST images are streamed from a host PC to the board via UART as raw pixel values.
@@ -308,12 +316,13 @@ Figure~\ref{fig:static_test} shows an example of the output produced during the
 functional validation phase, where the predicted digit is printed on the serial
 console.
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{images/test_static_output.png}
-    \caption{Functional validation using static MNIST test images.}
+    \includegraphics[width=1\textwidth]{images/lab5_start_test}
+    \caption{Functional validation using statically linked MNIST test images.}
     \label{fig:static_test}
 \end{figure}
+
 
 
 \chapter{Execution Time Measurement}
@@ -351,6 +360,9 @@ initialization, the first iteration of the inference loop is discarded.
 This warm-up phase ensures that subsequent measurements reflect steady-state
 execution conditions.
 
+
+
+
 \section{Per-Layer Profiling}
 
 Each fully connected layer and activation function is timed independently.
@@ -367,10 +379,10 @@ where multiply--accumulate operations represent the primary workload.
 Figure~\ref{fig:timing} illustrates a representative timing breakdown obtained during
 real-time inference, highlighting the contribution of each processing stage.
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\textwidth]{figures/timing_breakdown.png}
-    \caption{Per-layer execution time breakdown during real-time inference.}
+    \includegraphics[width=1\textwidth]{images/lab5_predicted_base}
+    \caption{Per-layer execution time breakdown measured using the ARM Global Timer.}
     \label{fig:timing}
 \end{figure}
 
@@ -429,12 +441,13 @@ Figure~\ref{fig:throughput} illustrates the measured throughput and highlights
 the clear separation between communication-dominated and computation-dominated
 phases.
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\textwidth]{figures/throughput.png}
-    \caption{Measured throughput and real-time capability.}
+    \includegraphics[width=1\textwidth]{images/lab5_Throughput.png}
+    \caption{Measured compute-only throughput and real-time capability.}
     \label{fig:throughput}
 \end{figure}
+
 
 \section{Discussion}
 

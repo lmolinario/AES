@@ -70,6 +70,7 @@
 #define n_bias3 10
 #define n_weights3 160     // 16*10
 
+
 /* ============================================================
  * CONFIGURATION FLAGS (TIPS)
  * ============================================================ */
@@ -80,6 +81,13 @@
 /* Tip 2: use weights/bias in Q1.7 instead of Q8.8 */
 #define USE_Q1_7_WEIGHTS  1   // 0 = baseline, 1 = Tip 2
 
+#if USE_Q1_7_WEIGHTS
+    #define QF_WEIGHTS 7
+#else
+    #define QF_WEIGHTS 8
+#endif
+
+#define QF_INPUT 8   // input always reconstructed to Q8.8
 
 /* Fixed-point data type */
 typedef short int DATA;
@@ -264,7 +272,7 @@ int main(){
           64,
           gemm0_weights,
           gemm0_bias,
-          8
+          QF_WEIGHTS
       );
 
       // ReLU 0
@@ -278,7 +286,7 @@ int main(){
           32,
           gemm1_weights,
           gemm1_bias,
-          8
+          QF_WEIGHTS
       );
 
       // ReLU 1
@@ -292,7 +300,7 @@ int main(){
           16,
           gemm2_weights,
           gemm2_bias,
-          8
+          QF_WEIGHTS
       );
 
       // ReLU 2
@@ -307,7 +315,7 @@ int main(){
           10,
           gemm3_weights,
           gemm3_bias,
-          8
+          QF_WEIGHTS
       );
 
       // Classificazione finale
@@ -361,7 +369,7 @@ int main(){
         /* Forward pass */
       // (2) FC0
       XTime_GetTime(&t_fc0_0);
-      FC_forward(image, output_gemm0, 784, 64, gemm0_weights, gemm0_bias, 8);
+      FC_forward(image, output_gemm0, 784, 64, gemm0_weights, gemm0_bias, QF_WEIGHTS);
       XTime_GetTime(&t_fc0_1);
 
       // (3) ReLU0
@@ -371,7 +379,7 @@ int main(){
 
       // (4) FC1
       XTime_GetTime(&t_fc1_0);
-      FC_forward(input_gemm1, output_gemm1, 64, 32, gemm1_weights, gemm1_bias, 8);
+      FC_forward(input_gemm1, output_gemm1, 64, 32, gemm1_weights, gemm1_bias, QF_WEIGHTS);
       XTime_GetTime(&t_fc1_1);
 
       // (5) ReLU1
@@ -381,7 +389,7 @@ int main(){
 
       // (6) FC2: 32 → 16
       XTime_GetTime(&t_fc2_0);
-      FC_forward(input_gemm2, output_gemm2, 32, 16, gemm2_weights, gemm2_bias, 8);
+      FC_forward(input_gemm2, output_gemm2, 32, 16, gemm2_weights, gemm2_bias, QF_WEIGHTS);
       XTime_GetTime(&t_fc2_1);
 
       // (7) ReLU2: 16
@@ -391,7 +399,7 @@ int main(){
 
       // (8) FC3: 16 → 10
       XTime_GetTime(&t_fc3_0);
-      FC_forward(input_gemm3, output_gemm3, 16, 10, gemm3_weights, gemm3_bias, 8);
+      FC_forward(input_gemm3, output_gemm3, 16, 10, gemm3_weights, gemm3_bias, QF_WEIGHTS);
       XTime_GetTime(&t_fc3_1);
 
       // (9) Classification (softmax + argmax)
