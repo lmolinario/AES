@@ -376,6 +376,12 @@ minor fraction of the total execution time.
 This observation is consistent with the expected behavior of dense neural networks,
 where multiply--accumulate operations represent the primary workload.
 
+Although a softmax stage is included in the result processing function provided in
+the laboratory template, the final classification is effectively determined through
+an argmax operation on the output logits. The softmax computation therefore does not
+affect the predicted class and is not performance-critical.
+
+
 Figure~\ref{fig:timing} illustrates a representative timing breakdown obtained during
 real-time inference, highlighting the contribution of each processing stage.
 
@@ -448,20 +454,138 @@ phases.
     \label{fig:throughput}
 \end{figure}
 
+\section{Baseline Performance Results}
+Experimental measurements performed on the baseline configuration show that the
+compute-only execution time of the DNN is approximately 3\,ms per image, corresponding
+to a throughput of about 335 images per second.
+These values were obtained from repeated real-time executions of the inference loop,
+measured using the ARM Global Timer and collected through UART debug output.
+Across multiple iterations, the DNN execution time remained highly stable
+(2.98–2.99\,ms), confirming deterministic behavior under steady-state conditions.
 
-\section{Discussion}
+Per-layer profiling highlights that the first fully connected layer (784→64)
+dominates the computational cost, accounting for more than 94\% of the total inference
+time.
 
-The obtained performance results demonstrate that a fully software-based DNN
-implementation, when combined with fixed-point arithmetic and careful system
-design, can achieve real-time inference on a general-purpose embedded processor.
-The dominance of communication latency over computation time suggests that
-further performance improvements would be more effectively achieved by optimizing
-data transfer mechanisms rather than by accelerating the inference core itself.
+In contrast, UART-based image reception requires between 2 and 3.4 seconds per image,
+depending on transmission conditions.
+As a result, the overall system performance is strongly communication-bound, while
+the inference pipeline easily satisfies real-time constraints.
+Measured UART reception times ranged between approximately 2.0\,s and 3.4\,s per image,
+resulting in a communication-to-computation ratio on the order of $10^3$.
+This clearly indicates that system throughput is limited by serial communication
+bandwidth rather than by computational performance of the inference pipeline.
+From a system-level perspective, these results demonstrate that the proposed
+software-based DNN implementation not only satisfies real-time requirements,
+but also leaves significant computational headroom for more complex models
+or additional processing stages.
+All results presented in this section refer to the baseline configuration,
+with Q8.8 input data and weights, and without communication optimizations enabled.
 
-These findings provide practical insight into the trade-offs involved in embedded
-AI deployments and underline the importance of holistic system-level analysis
-when evaluating performance and real-time behavior.
 
+
+
+\section{Performance Results with Optimization Tips Enabled}
+
+This section presents the performance evaluation of the optimized configuration,
+where the laboratory optimization tips are enabled.
+In particular, the following enhancements are considered:
+(i) compact input data transmission using Q0.8 format,
+and (ii) alternative fixed-point representation for weights and biases using Q1.7.
+
+The goal of this evaluation is to quantify the impact of these optimizations on
+communication latency, numerical robustness, and overall system behavior, while
+preserving functional correctness and real-time capability.
+
+\subsection{Compute Performance}
+
+When optimization tips are enabled, the internal structure of the DNN inference
+pipeline remains unchanged.
+As a consequence, the compute-only execution time of the network is expected to
+remain comparable to the baseline configuration.
+
+Experimental measurements confirm this expectation.
+The execution time of the DNN inference remains approximately constant at around
+3\,ms per image, corresponding to a compute-only throughput on the order of
+330–340 images per second.
+This result indicates that the adopted optimizations do not introduce additional
+computational overhead and preserve the deterministic execution behavior observed
+in the baseline case.
+
+The stability of the measured inference time across multiple iterations further
+confirms that the fixed-point implementation and the use of alternative Q-formats
+do not negatively affect timing predictability.
+
+\subsection{Impact on Communication Latency}
+
+The primary performance benefit of the optimized configuration is observed at the
+communication level.
+By transmitting input images using a Q0.8 representation, each pixel is encoded
+using a single byte instead of two, effectively reducing the amount of data sent
+over UART by approximately 50\%.
+
+As a result, the time required to receive a full MNIST image is significantly
+reduced compared to the baseline configuration.
+While the system remains communication-bound, the reduced reception time improves
+overall responsiveness and increases the maximum sustainable input rate.
+
+This optimization directly targets the dominant bottleneck identified in the
+baseline analysis, namely the UART-based data transfer, and therefore represents
+a system-level improvement rather than a pure computational optimization.
+
+\subsection{Numerical Robustness and Stability}
+
+The use of a Q1.7 fixed-point format for weights and biases increases the dynamic
+range available during accumulation in fully connected layers.
+This reduces the risk of saturation effects, particularly in deeper network
+configurations such as the custom Group~4 topology.
+
+Experimental validation confirms that classification accuracy and functional
+correctness are preserved under the optimized configuration.
+No instability or anomalous behavior was observed during extended execution,
+demonstrating that the alternative fixed-point representation is fully compatible
+with the implemented inference pipeline.
+
+\subsection{Discussion on Optimized Configuration}
+
+The performance evaluation with optimization tips enabled highlights an important
+system-level insight.
+While computational performance remains essentially unchanged, communication
+efficiency and numerical robustness are significantly improved.
+
+These results confirm that, in embedded DNN microserver applications, effective
+optimization strategies often target data representation and communication
+mechanisms rather than raw computational acceleration.
+The optimized configuration therefore provides a more balanced and robust system
+design, while fully satisfying real-time requirements.
+
+\section{Overall Discussion}
+
+The performance evaluation presented in this chapter highlights a clear separation
+between computation and communication costs in the proposed DNN microserver.
+In both the baseline and optimized configurations, the inference pipeline exhibits
+deterministic execution times on the order of a few milliseconds per image, confirming
+the suitability of the fixed-point software-based implementation for real-time
+operation on an embedded ARM Cortex-A9 processor.
+
+The baseline analysis demonstrates that computation is not the limiting factor,
+as the inference time is orders of magnitude smaller than the UART communication
+latency.
+This observation is further reinforced by the optimized configuration, where
+communication-oriented enhancements significantly reduce input reception time
+without affecting computational performance.
+
+The comparison between baseline and optimized results confirms that system-level
+optimizations targeting data representation and communication bandwidth are more
+effective than purely computational optimizations in this context.
+At the same time, the adoption of alternative fixed-point formats improves numerical
+robustness, particularly for deeper network topologies, without compromising timing
+predictability or functional correctness.
+
+Overall, the obtained results validate the design choices adopted in this work and
+demonstrate that careful software design, combined with measurement-driven analysis,
+enables efficient and scalable deployment of Deep Neural Network inference on
+resource-constrained embedded platforms.
 
 \chapter{Optimization Tips and Custom Enhancements}
 
