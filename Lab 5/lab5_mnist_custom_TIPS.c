@@ -39,10 +39,10 @@
  *
  ***************************************************************/
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <limits.h>
 
 #include "platform.h"
 #include "xil_printf.h"
@@ -129,8 +129,10 @@ DATA gemm3_weights[n_weights3] = {weights3};
 #define FIXED2FLOAT(a, qf) (((float) (a)) / (1<<qf))
 #define FLOAT2FIXED(a, qf) ((short int) round((a) * (1<<qf)))
 
-#define _MAX_ (1 << (sizeof(DATA)*8-1))-1
-#define _MIN_ -(_MAX_+1)
+
+#define _MAX_ INT16_MAX
+#define _MIN_ INT16_MIN
+
 
 
 static inline u32 ticks_to_us(u64 ticks)
@@ -528,7 +530,7 @@ int resultsProcessing(DATA* results, int size){
   DATA max=0;
   int max_i;
   for (int i =0;i<size_wa;i++){
-      results_float[i] = FIXED2FLOAT(results[i],8);
+      results_float[i] = FIXED2FLOAT(results[i],QF_WEIGHTS);
     int n;
     if (results[i]>0)
       n=results[i];
