@@ -1,58 +1,371 @@
-\section{Introduction}
+\chapter{Introduction}
+
+The increasing adoption of Artificial Intelligence techniques in embedded and
+resource-constrained systems has highlighted the importance of efficient
+software--hardware co-design methodologies.
+In particular, the deployment of Deep Neural Networks (DNNs) on embedded platforms
+poses significant challenges in terms of computational complexity, memory usage,
+data movement, and real-time constraints.
+
 This report describes the implementation of a Deep Neural Network (DNN) microserver
 for handwritten digit recognition (MNIST) running on the Zybo Z7 platform.
-The application performs real-time inference on images streamed via UART and
-is designed according to embedded system constraints.
+The application performs real-time inference on images streamed via UART and is
+specifically designed according to embedded system constraints, without relying on
+hardware accelerators or dedicated neural processing units.
 
-\section{Target Platform and Development Environment}
-The application targets the Processing System (PS) of the Zynq-7000 SoC,
-specifically the ARM Cortex-A9 core available on the Zybo Z7 board.
-The software is developed as a standalone application using the Xilinx SDK.
-\section{DNN Architecture Analysis}
+The target platform is based on the Zynq-7000 System-on-Chip, where an ARM Cortex-A9
+Processing System executes a fully software-based inference pipeline.
+The adopted approach emphasizes explicit control over data representation,
+memory organization, and execution flow, which are key aspects in the context of
+Advanced Embedded Systems.
 
-\subsection{Baseline Network}
-The baseline DNN topology was analyzed using the Netron tool by inspecting the
-provided ONNX model.
-\begin{figure}[h]
+The implemented DNN processes grayscale images of size $28 \times 28$ pixels and
+classifies each input sample as a digit in the range from 0 to 9.
+Inference is carried out using fixed-point arithmetic, allowing the elimination of
+floating-point operations and ensuring deterministic execution times.
+This design choice reflects common practices in embedded AI applications, where
+predictability and efficiency are often prioritized over numerical precision.
+
+In addition to functional correctness, particular attention is devoted to the
+experimental evaluation of performance.
+Execution times are measured at cycle level using the ARM Global Timer, enabling
+fine-grained profiling of individual stages such as data reception, fully connected
+layers, activation functions, and result post-processing.
+This measurement-driven approach allows a quantitative assessment of real-time
+capability and highlights the impact of software optimizations on overall system
+performance.
+
+Finally, the report also presents an extended implementation based on a custom DNN
+topology assigned to Group~4, demonstrating the scalability and modularity of the
+proposed software framework.
+The combination of architectural analysis, fixed-point design, and experimental
+profiling provides a comprehensive view of how DNN inference can be effectively
+mapped onto an embedded ARM-based platform.
+
+
+\chapter{Target Platform and Development Environment}
+
+The application targets the Processing System (PS) of the Zynq-7000 System-on-Chip,
+specifically the ARM Cortex-A9 core available on the Zybo Z7 development board.
+The Zynq-7000 architecture combines a dual-core ARM processing system with
+programmable logic on the same device, enabling a wide range of hardware--software
+co-design solutions.
+
+In this laboratory activity, the entire Deep Neural Network inference pipeline is
+executed on the ARM Cortex-A9 processor, without exploiting the programmable logic
+or dedicated hardware accelerators.
+This choice allows the evaluation of a pure software-based implementation under
+embedded constraints, focusing on instruction-level execution, memory hierarchy,
+and real-time behavior.
+
+The software is developed as a standalone application using the Xilinx Software
+Development Kit (SDK).
+The standalone execution model avoids the overhead introduced by an operating
+system, providing direct access to hardware peripherals and enabling precise and
+deterministic timing measurements.
+Such an execution environment is particularly suitable for performance evaluation
+and low-level optimization tasks, which are central topics in Advanced Embedded
+Systems.
+
+Communication between the host computer and the embedded platform is performed via
+UART.
+This interface is used to stream input images to the board and to transmit the
+classification results back to the host.
+The UART-based communication scheme reflects a realistic scenario for embedded
+systems, where external data sources are often connected through low-bandwidth
+serial interfaces.
+
+All timing measurements presented in this work are obtained using the 64-bit ARM
+Global Timer available in the Processing System.
+This hardware timer enables cycle-accurate profiling of the application, allowing
+a detailed analysis of execution times associated with data reception, neural
+network inference, and result processing.
+
+Overall, the selected platform and development environment provide a suitable and
+controlled context for studying the deployment of Deep Neural Networks on embedded
+ARM-based systems, emphasizing software efficiency, determinism, and experimental
+performance evaluation.
+
+
+\chapter{DNN Architecture Analysis}
+
+This chapter describes the architecture of the Deep Neural Network implemented
+in this work.
+The analysis is based on the inspection of the ONNX models provided with the
+laboratory material using the Netron visualization tool.
+The goal of this analysis is to clearly identify the sequence of layers, their
+dimensions, and the corresponding computational workload to be mapped onto the
+embedded ARM-based platform.
+
+\section{Baseline Network}
+
+The baseline DNN topology was analyzed by inspecting the ONNX model using Netron.
+The network is composed exclusively of fully connected layers, preceded by a
+flattening stage that converts the two-dimensional input image into a one-dimensional
+feature vector.
+
+The input to the network is a grayscale MNIST image of size $28 \times 28$ pixels,
+which is flattened into a vector of 784 elements.
+This vector is then processed by a sequence of fully connected layers with decreasing
+dimensionality, followed by non-linear activation functions.
+
+In particular, the baseline network consists of the following layers:
+\begin{itemize}
+    \item a fully connected layer mapping 784 input features to 64 neurons,
+    \item a fully connected layer mapping 64 features to 32 neurons,
+    \item a final fully connected layer mapping 32 features to 10 output classes.
+\end{itemize}
+
+Each intermediate fully connected layer is followed by a ReLU activation function,
+while the output layer produces a vector of 10 scores corresponding to the digit
+classes from 0 to 9.
+This architecture represents a simple yet effective reference model for MNIST
+classification and is well suited for implementation on embedded systems due to its
+regular structure and predictable memory access patterns.
+
+Figure~\ref{fig:onnx_base} shows the baseline DNN topology as visualized using Netron.
+
+\begin{figure}[!H]
     \centering
-    \includegraphics[width=0.6\textwidth]{figures/onnx_model.png}
+    \includegraphics[width=0.3\textwidth]{images/onnx_model.png}
     \caption{Baseline MNIST DNN topology visualized with Netron.}
     \label{fig:onnx_base}
 \end{figure}
 
-\subsection{Custom Network Topology (Group 4)}
-A custom network topology was implemented according to the group-specific assignment.
-The network includes an additional fully connected layer, increasing depth and
+The simplicity of the baseline network allows a direct and transparent mapping
+between the graphical representation provided by Netron and the corresponding C
+implementation.
+Each fully connected layer is implemented explicitly as a nested loop performing
+multiply--accumulate operations, while activation functions are implemented as
+separate processing stages.
+
+\section{Custom Network Topology (Group 4)}
+
+In addition to the baseline network, a custom DNN topology was implemented according
+to the group-specific assignment (Group~4).
+The custom network extends the baseline architecture by introducing an additional
+fully connected layer, thereby increasing the depth of the network and the overall
 computational workload.
-\begin{figure}[h]
+
+The custom topology is composed of the following layers:
+\begin{itemize}
+    \item a fully connected layer mapping 784 input features to 64 neurons,
+    \item a fully connected layer mapping 64 features to 32 neurons,
+    \item a fully connected layer mapping 32 features to 16 neurons,
+    \item a final fully connected layer mapping 16 features to 10 output classes.
+\end{itemize}
+
+As in the baseline case, ReLU activation functions are applied after each intermediate
+layer.
+The introduction of an additional hidden layer increases the number of parameters
+and arithmetic operations, providing a more challenging scenario for performance
+evaluation on the embedded platform.
+
+Figure~\ref{fig:onnx_group4} illustrates the custom DNN topology as visualized using
+Netron.
+
+\begin{figure}[!H]
     \centering
-    \includegraphics[width=0.6\textwidth]{figures/onnx_model_group4.png}
+    \includegraphics[width=0.4\textwidth]{images/onnx_model_group_4}
     \caption{Custom DNN topology for Group 4.}
     \label{fig:onnx_group4}
 \end{figure}
 
-\section{Fixed-Point DNN Implementation}
-The DNN inference is implemented entirely using fixed-point arithmetic.
-All weights, biases, and activations are represented as 16-bit integers
-using a Q-format representation.
+The comparison between the baseline and the custom network allows the evaluation
+of the scalability of the proposed software framework.
+In particular, it highlights how changes in network depth and layer dimensions
+affect execution time, memory usage, and real-time capability, without requiring
+substantial modifications to the overall implementation structure.
 
-\section{UART-Based DNN Microserver}
-\subsection{Input Streaming}
+
+\chapter{Fixed-Point DNN Implementation}
+
+The Deep Neural Network inference is implemented entirely using fixed-point
+arithmetic.
+All weights, biases, and activations are represented as 16-bit signed integers,
+allowing the elimination of floating-point operations and reducing computational
+complexity on the embedded ARM Cortex-A9 platform.
+
+The adoption of fixed-point arithmetic is a common design choice in embedded
+systems, where limited computational resources and real-time constraints make
+floating-point operations less desirable.
+In this work, fixed-point representation enables deterministic execution times
+and explicit control over numerical precision and overflow behavior.
+
+\section{Data Representation and Q-Format}
+
+A Q-format representation is adopted to encode real-valued quantities using
+integer arithmetic.
+In the baseline configuration, all network parameters and intermediate results
+are represented using a Q8.8 format, where 8 bits are used for the integer part
+and 8 bits for the fractional part.
+
+This format provides a good compromise between numerical precision and dynamic
+range for MNIST classification, while maintaining compatibility with 16-bit
+integer arithmetic.
+Alternative configurations are also explored in the custom implementation, such
+as Q1.7 for weights and biases, in order to improve dynamic range and reduce the
+risk of saturation.
+
+\section{Multiply--Accumulate Operations}
+
+Each fully connected layer is implemented as a sequence of multiply--accumulate
+(MAC) operations.
+For each output neuron, the dot product between the input vector and the
+corresponding weight vector is computed.
+
+To preserve numerical accuracy, accumulation is performed using a 64-bit
+integer accumulator.
+Bias terms are added at the beginning of each accumulation, properly aligned
+according to the selected Q-format.
+After accumulation, the result is scaled back to the original fixed-point
+representation by means of a right shift operation.
+
+\section{Saturation and Overflow Control}
+
+To prevent numerical overflow and ensure predictable behavior, explicit
+saturation is applied to the output of each fully connected layer.
+Accumulated values exceeding the representable range of a 16-bit signed integer
+are clamped to the maximum or minimum allowable value.
+
+This saturation mechanism guarantees stability of the inference process and
+avoids undefined behavior due to integer overflow.
+Although saturation may introduce minor numerical distortion, its impact on
+classification accuracy is negligible for the considered network and dataset,
+while significantly improving robustness in an embedded execution context.
+
+\section{Activation Functions}
+
+Non-linear activation functions are implemented explicitly using integer
+arithmetic.
+In particular, the Rectified Linear Unit (ReLU) function is applied after each
+intermediate fully connected layer.
+
+The ReLU operation is implemented as a simple comparison followed by a conditional
+assignment, setting negative values to zero.
+This implementation is computationally inexpensive and well suited for
+fixed-point arithmetic, contributing minimally to the overall execution time.
+
+\section{Benefits of the Fixed-Point Design}
+
+The fixed-point implementation provides several advantages in the context of
+embedded systems:
+\begin{itemize}
+    \item elimination of floating-point operations and reliance on the FPU,
+    \item reduced instruction count and computational overhead,
+    \item deterministic execution times suitable for real-time analysis,
+    \item explicit control over numerical precision and overflow behavior.
+\end{itemize}
+
+These benefits play a crucial role in enabling real-time DNN inference on a
+general-purpose embedded processor without the need for hardware acceleration.
+
+
+\chapter{UART-Based DNN Microserver}
+
+This chapter describes the communication architecture adopted to implement the
+DNN microserver.
+The microserver is responsible for receiving input data from an external host,
+executing the neural network inference, and returning the classification result.
+A UART-based communication interface is used to stream MNIST images to the
+embedded platform.
+
+\section{Input Streaming}
+
 MNIST images are streamed from a host PC to the board via UART as raw pixel values.
-Each image consists of 784 samples.
-\subsection{Functional Validation}
-Before enabling real-time streaming, the DNN was validated using statically linked
-test images.
+Each image consists of 784 samples corresponding to a grayscale image of size
+$28 \times 28$ pixels.
+
+Data reception is performed in a blocking manner to simplify synchronization
+between communication and computation.
+Each pixel is transmitted as a fixed-point value and reconstructed on the
+embedded platform according to the selected data representation.
+This approach allows direct integration with the fixed-point inference pipeline
+described in the previous chapter.
+
+In the baseline configuration, each pixel is transmitted using two bytes,
+corresponding to a Q8.8 fixed-point representation.
+Additional optimizations are explored in the custom implementation, where input
+pixels are transmitted using a more compact Q0.8 format in order to reduce
+communication overhead.
+
+\section{Functional Validation}
+
+Before enabling real-time streaming, the correctness of the DNN implementation
+was validated using statically linked test images.
+This validation step allows functional verification of the inference pipeline
+independently of the communication subsystem, simplifying debugging and ensuring
+correct operation of the neural network core.
+
+A set of predefined MNIST test images is embedded directly into the application
+as header files.
+Each image is processed by the DNN, and the predicted digit is compared against
+the expected result.
+Successful classification of these test samples confirms the correctness of the
+network architecture, fixed-point arithmetic, and activation functions.
+
+Figure~\ref{fig:static_test} shows an example of the output produced during the
+functional validation phase, where the predicted digit is printed on the serial
+console.
+
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.8\textwidth]{figures/test_static_output.png}
+    \includegraphics[width=0.8\textwidth]{images/test_static_output.png}
     \caption{Functional validation using static MNIST test images.}
     \label{fig:static_test}
 \end{figure}
 
-\section{Execution Time Measurement}
-Timing measurements are performed using the 64-bit ARM Global Timer,
-allowing cycle-accurate profiling of each inference stage.
+
+\chapter{Execution Time Measurement}
+
+Accurate execution time measurement is a fundamental aspect when evaluating the
+feasibility of Deep Neural Network inference on embedded platforms.
+In this work, timing measurements are performed using the 64-bit ARM Global Timer
+available in the Processing System of the Zynq-7000 SoC, enabling cycle-accurate
+profiling of the entire inference pipeline.
+
+The Global Timer provides a hardware-based timing source independent of software
+overhead and operating system interference.
+This makes it particularly suitable for fine-grained performance analysis in
+standalone embedded applications, where deterministic behavior is required.
+
+\section{Measurement Methodology}
+
+Execution time is measured by reading the Global Timer counter before and after
+specific code sections.
+All measurements are expressed in clock cycles and subsequently converted to
+microseconds using the known timer frequency.
+
+The inference loop is instrumented to measure the execution time of the following
+stages:
+\begin{itemize}
+    \item image reception via UART,
+    \item execution of each fully connected layer,
+    \item execution of activation functions,
+    \item final classification and result processing,
+    \item total iteration time.
+\end{itemize}
+
+To avoid distortions due to cache cold-start effects and branch predictor
+initialization, the first iteration of the inference loop is discarded.
+This warm-up phase ensures that subsequent measurements reflect steady-state
+execution conditions.
+
+\section{Per-Layer Profiling}
+
+Each fully connected layer and activation function is timed independently.
+This per-layer profiling approach allows identification of the most computationally
+intensive stages of the network and provides insight into how network depth and
+layer dimensions affect performance.
+
+The measured execution times clearly show that the fully connected layers dominate
+the computational cost of inference, while activation functions contribute only a
+minor fraction of the total execution time.
+This observation is consistent with the expected behavior of dense neural networks,
+where multiply--accumulate operations represent the primary workload.
+
+Figure~\ref{fig:timing} illustrates a representative timing breakdown obtained during
+real-time inference, highlighting the contribution of each processing stage.
 
 \begin{figure}[h]
     \centering
@@ -61,10 +374,61 @@ allowing cycle-accurate profiling of each inference stage.
     \label{fig:timing}
 \end{figure}
 
-\section{Performance Evaluation}
-The compute-only throughput is evaluated by excluding UART reception time.
-Results show that the DNN execution time is significantly lower than
-communication latency, ensuring real-time capability.
+\section{Communication Versus Computation}
+
+The separation between communication time and computation time is particularly
+important in the context of embedded microservers.
+Measurements show that the time required to receive an image via UART is
+significantly larger than the time required to execute the DNN inference itself.
+
+This result demonstrates that, under the considered configuration, the system is
+compute-efficient and that overall throughput is primarily limited by communication
+bandwidth rather than by processing capability.
+Such an analysis provides a solid basis for evaluating the impact of communication
+optimizations and for assessing real-time feasibility.
+
+Overall, the adopted measurement methodology provides a detailed and reliable
+characterization of execution time, enabling quantitative evaluation of software
+optimizations and architectural design choices.
+
+\chapter{Performance Evaluation}
+
+This chapter presents the performance evaluation of the implemented DNN
+microserver, with particular focus on throughput and real-time capability.
+Performance metrics are derived from the execution time measurements discussed
+in the previous chapter and are used to assess the feasibility of the proposed
+software-based inference approach on an embedded ARM platform.
+
+\section{Compute-Only Throughput}
+
+To evaluate the computational efficiency of the DNN implementation, the
+compute-only throughput is calculated by excluding the time required for UART
+data reception.
+This allows isolation of the pure inference performance from communication
+overhead, providing a clearer view of the processing capabilities of the
+ARM Cortex-A9 processor.
+
+Compute-only throughput is expressed in terms of processed images per second
+(img/s) and is derived from the inverse of the DNN execution time.
+This metric provides a concise and meaningful indicator of inference performance
+independent of external I/O constraints.
+
+\section{Real-Time Capability Analysis}
+
+Experimental results show that the execution time of the DNN inference is
+significantly lower than the time required to receive an input image via UART.
+As a consequence, the system is able to process each image well within the
+available time window defined by the communication latency.
+
+This observation confirms that the proposed implementation satisfies real-time
+requirements under the considered operating conditions.
+In particular, the inference pipeline does not introduce bottlenecks that could
+cause backlog or data loss when images are streamed sequentially from the host.
+
+Figure~\ref{fig:throughput} illustrates the measured throughput and highlights
+the clear separation between communication-dominated and computation-dominated
+phases.
+
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.9\textwidth]{figures/throughput.png}
@@ -72,11 +436,128 @@ communication latency, ensuring real-time capability.
     \label{fig:throughput}
 \end{figure}
 
-\section{Optimization Tips and Custom Enhancements}
-Additional optimizations were explored by modifying input and weight representations,
-as suggested in the laboratory guidelines.
+\section{Discussion}
 
-\section{Conclusions}
-This work demonstrates that a fully software-based DNN can achieve real-time
-MNIST classification on an embedded ARM Cortex-A9 platform when fixed-point
+The obtained performance results demonstrate that a fully software-based DNN
+implementation, when combined with fixed-point arithmetic and careful system
+design, can achieve real-time inference on a general-purpose embedded processor.
+The dominance of communication latency over computation time suggests that
+further performance improvements would be more effectively achieved by optimizing
+data transfer mechanisms rather than by accelerating the inference core itself.
+
+These findings provide practical insight into the trade-offs involved in embedded
+AI deployments and underline the importance of holistic system-level analysis
+when evaluating performance and real-time behavior.
+
+
+\chapter{Optimization Tips and Custom Enhancements}
+
+In addition to the baseline implementation, several optimizations were explored
+by modifying the representation of input data and network parameters, as suggested
+in the laboratory guidelines.
+These enhancements aim at reducing communication overhead, improving numerical
+robustness, and evaluating the impact of different fixed-point formats on overall
+system performance.
+
+All optimizations are implemented in a configurable manner, allowing direct
+comparison between baseline and optimized configurations without altering the
+overall software architecture.
+
+\section{Input Data Optimization}
+
+In the baseline configuration, input images are transmitted via UART using a
+Q8.8 fixed-point representation, where each pixel is encoded using two bytes.
+While this format simplifies integration with the fixed-point inference pipeline,
+it introduces a non-negligible communication overhead.
+
+As an optimization, input images are alternatively transmitted using a more compact
+Q0.8 representation, where each pixel is encoded using a single byte.
+On the embedded platform, input values are reconstructed into Q8.8 format before
+being processed by the DNN.
+
+This approach effectively reduces the amount of data transferred over UART by
+approximately 50\%, leading to a significant reduction in image reception time.
+Experimental measurements confirm that this optimization primarily affects
+communication latency, while leaving the computational behavior of the inference
+pipeline unchanged.
+
+\section{Weight and Bias Representation}
+
+Another optimization concerns the representation of network weights and biases.
+In the baseline configuration, all parameters are represented using a Q8.8 format.
+While sufficient for MNIST classification, this format may limit dynamic range and
+increase the risk of saturation in deeper networks.
+
+To address this issue, an alternative Q1.7 representation is explored for weights
+and biases.
+By allocating an additional bit to the integer part, this format increases dynamic
+range while preserving fractional precision compatible with fixed-point arithmetic.
+
+The adoption of Q1.7 weights and biases improves numerical robustness and reduces
+the occurrence of saturation during accumulation, particularly in the custom
+network topology with increased depth.
+This optimization does not require changes to the core inference algorithm and
+is fully compatible with the existing fixed-point infrastructure.
+
+\section{Configurability and Scalability}
+
+All optimization options are controlled through compile-time configuration flags.
+This design choice allows rapid switching between baseline and optimized
+configurations, facilitating experimental evaluation and comparison.
+
+The same software framework is used for both the baseline and the custom DNN
+topologies, demonstrating the scalability and modularity of the implementation.
+Network depth and layer dimensions can be modified without affecting the overall
+structure of the code, highlighting the generality of the adopted approach.
+
+\section{Impact on Performance}
+
+Experimental results show that the explored optimizations do not compromise the
+functional correctness of the DNN inference.
+Instead, they provide tangible benefits in terms of reduced communication overhead
+and improved numerical stability.
+
+In particular, input data optimization directly reduces UART reception time,
+while parameter representation optimizations enhance robustness in deeper network
+configurations.
+These results confirm that careful data representation and system-level design
+choices play a crucial role in achieving efficient embedded AI implementations.
+
+
+\chapter{Conclusions}
+
+This work demonstrates that a fully software-based Deep Neural Network can achieve
+real-time MNIST classification on an embedded ARM Cortex-A9 platform when fixed-point
 arithmetic and careful system design are employed.
+
+Starting from the analysis of the DNN architecture using ONNX models and Netron,
+the inference pipeline was manually mapped onto an embedded processing system,
+emphasizing explicit control over data representation, memory organization, and
+execution flow.
+The adoption of fixed-point arithmetic enabled the elimination of floating-point
+operations, ensuring deterministic behavior and reducing computational overhead.
+
+The implementation of a UART-based microserver allowed realistic evaluation of
+data streaming and inference under communication constraints.
+Experimental results clearly showed that, in the considered configuration, the
+execution time of the DNN inference is significantly lower than the communication
+latency, confirming the real-time capability of the system.
+
+Cycle-accurate execution time measurements performed using the ARM Global Timer
+provided detailed insight into the contribution of each processing stage.
+Per-layer profiling highlighted the dominance of fully connected layers in the
+computational workload and confirmed the effectiveness of the adopted optimization
+strategies.
+
+Additional enhancements, including compact input data representation and alternative
+fixed-point formats for network parameters, further improved communication efficiency
+and numerical robustness without requiring changes to the core inference algorithm.
+The successful extension to a custom network topology demonstrates the scalability
+and modularity of the proposed software framework.
+
+Overall, this laboratory activity illustrates how Deep Neural Network inference can
+be effectively deployed on a general-purpose embedded processor through careful
+software design and measurement-driven optimization.
+The results highlight the importance of system-level analysis when integrating AI
+techniques into embedded platforms and provide a solid foundation for further
+exploration of hardware--software co-design solutions.
