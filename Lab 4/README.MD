@@ -72,7 +72,7 @@ Lab4_ParallelProcessing/
 ├── master.c                         → Core 0: serial + parallel + timing
 ├── worker.c                         → Core 1: second-half computation
 ├── shared.h                         → Shared DDR structure and flags
-├── main.pdf                         → Experimental result
+├── main.pdf                         → Experimental result Report
 └── README.md                        → Lab documentation (this file)
 ```
 
