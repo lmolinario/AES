@@ -101,7 +101,7 @@ int resultsProcessing(DATA* results, int size);
  * ============================================================ */
 
 /* Read one fixed-point pixel from UART (2 bytes, little-endian) */
-DATA readfromUART(){
+DATA readfromUART(){ /
     u8 lo = XUartPs_RecvByte(XPAR_PS7_UART_1_BASEADDR); // first byte (LSB)
     u8 hi = XUartPs_RecvByte(XPAR_PS7_UART_1_BASEADDR); // second byte (MSB)
     return (DATA)((hi << 8) | lo);
