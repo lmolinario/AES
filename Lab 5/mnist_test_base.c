@@ -1,35 +1,5 @@
-/***************************************************************
- * Lab 5 – DNN on MNIST via UART (Software-only inference)
- *
- * Author: Lello Molinario
- * Course: Advanced Embedded Systems – University of Cagliari
- * Board: Zybo Z7 (Zynq-7000, ARM Cortex-A9)
- *
- * Description
- * ------------------------------------------------------------
- * This application implements a fully software-based Deep Neural
- * Network (DNN) for handwritten digit recognition (MNIST).
- *
- * The network is executed on the ARM Cortex-A9 Processing System
- * and receives input images via UART, encoded as fixed-point
- * signed 16-bit values (Q8.8).
- *
- * The code integrates and extends concepts developed in:
- *  - Lab 3: execution-time measurement (Global Timer / XTime)
- *  - Lab 4: parallel/serial computation structure
- *  - Lab 5: DNN inference pipeline and UART-based I/O
- *
- * The execution time is profiled at application level, separating:
- *  - UART reception latency
- *  - DNN inference time
- *  - Output / printing overhead
- *
- * All large buffers and tensors are statically allocated.
- * This avoids dynamic memory usage and guarantees:
- *  - predictable memory layout
- *  - no runtime allocation overhead
- *  - suitability for real-time embedded systems
- ***************************************************************/
+
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -103,7 +73,7 @@ int resultsProcessing(DATA* results, int size);
  * ============================================================ */
 
 /*
- * Ten reference MNIST images (digits 0–9) are embedded in the
+ * Ten reference MNIST images (digits 0â€“9) are embedded in the
  * program to validate the correctness of the DNN inference
  * before enabling UART-based input.
  */
@@ -148,6 +118,11 @@ DATA readfromUART() {
     u8 data2 = uart_inbyte();   // MSB
     return (DATA)((data2 << 8) | data1);
 }
+
+
+#define TEST_UART       1
+#define TEST_HARDCODED  0
+#define TEST_MODE TEST_UART
 
 
 /* ============================================================
@@ -268,18 +243,50 @@ int main(){
          */
 
         /* ---------------- RX TIMING ---------------- */
-        for (int i = 0; i < 784; i++)
-            image_uart[i] = readfromUART();
+		#if TEST_MODE == TEST_UART
+		for (int i = 0; i < 784; i++)
+			image_uart[i] = readfromUART();
+		#elif TEST_MODE == TEST_HARDCODED
+		for (int i = 0; i < 784; i++)
+			image_uart[i] = immagine[5][i];   // il 5 che funziona offline
+		#endif
+
 
         XTime_GetTime(&t1);
 
+        // ================= UART RX TEST =================
+        xil_printf("[UART RX TEST] First 16 pixels:\r\n");
+        for (int i = 0; i < 16; i++) {
+            xil_printf("%d ", image_uart[i]);
+        }
+        xil_printf("\r\n");
+        // ===============================================
+        // ================= SCALE TEST =================
+        DATA min = image_uart[0];
+        DATA max = image_uart[0];
 
-/*
+        for (int i = 0; i < 784; i++) {
+            if (image_uart[i] < min) min = image_uart[i];
+            if (image_uart[i] > max) max = image_uart[i];
+        }
+
+        xil_printf("[SCALE] min=%d max=%d\r\n", min, max);
+        // ==============================================
+
+        // ================= PRE-GEMM CHECK =================
+        xil_printf("[PRE-GEMM] First 16 input values:\r\n");
+        for (int i = 0; i < 16; i++) {
+            xil_printf("%d ", image_uart[i]);
+        }
+        xil_printf("\r\n");
+        // =================================================
+
+        /*
          * DNN inference pipeline
          * ------------------------------------------------------------
          * The inference is executed sequentially on a single core,
          * but the code structure mirrors a stage-based pipeline
-         * (FC → ReLU → FC → ReLU → FC).
+         * (FC â†’ ReLU â†’ FC â†’ ReLU â†’ FC).
          *
          * This organization is consistent with Lab 4 concepts and
          * allows future extensions such as:
@@ -287,6 +294,8 @@ int main(){
          *  - NEON vectorization
          *  - dual-core partitioning
          */
+
+
 
         /* ---------------- DNN INFERENCE ---------------- */
         FC_forward(image_uart, output_gemm0, 784, 64,

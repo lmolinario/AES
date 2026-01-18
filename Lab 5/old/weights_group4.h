@@ -2,6 +2,7 @@
  * weights_group4.h
  *
  * Generated automatically
+ * Baseline Q8.8 + Tip 2 Q1.7
  * Author: Lello Molinario
  */
 

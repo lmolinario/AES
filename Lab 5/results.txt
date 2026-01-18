@@ -1,0 +1,327 @@
+
+Started
+
+=== LAB5 === DNN on MNIST===
+
+=== GROUP 4 CUSTOM DNN on MNIST===
+
+----------------------------------------
+ Fixed-Point Configuration
+----------------------------------------
+ Mode        : BASELINE
+ Input       : Q8.8  (2 bytes / pixel)
+ Weights     : Q8.8
+ Bias        : Q8.8
+ Internal QF : 8
+----------------------------------------
+
+
+===== Test image 0 =====
+Expected = 0, Predicted = 0
+
+===== Test image 1 =====
+Expected = 1, Predicted = 1
+
+===== Test image 2 =====
+Expected = 2, Predicted = 2
+
+===== Test image 3 =====
+Expected = 3, Predicted = 3
+
+===== Test image 4 =====
+Expected = 4, Predicted = 4
+
+===== Test image 5 =====
+Expected = 5, Predicted = 3
+
+===== Test image 6 =====
+Expected = 6, Predicted = 6
+
+===== Test image 7 =====
+Expected = 7, Predicted = 7
+
+===== Test image 8 =====
+Expected = 8, Predicted = 8
+
+===== Test image 9 =====
+Expected = 9, Predicted = 9
+
+Waiting for image...
+Predicted digit = 0
+
+TIMING us: RX=21890175 DNN=2989 PRINT=18 ITER=21893183
+
+
+Waiting for image...
+Predicted digit = 1
+
+TIMING us: RX=3964751 DNN=2988 PRINT=18 ITER=3967758
+
+
+Waiting for image...
+Predicted digit = 2
+
+TIMING us: RX=5100474 DNN=2988 PRINT=17 ITER=5103480
+
+
+Waiting for image...
+Predicted digit = 3
+
+TIMING us: RX=3776143 DNN=2988 PRINT=17 ITER=3779150
+
+
+Waiting for image...
+Predicted digit = 4
+
+TIMING us: RX=4370541 DNN=2989 PRINT=18 ITER=4373549
+
+
+Waiting for image...
+Predicted digit = 3
+
+TIMING us: RX=5415004 DNN=2988 PRINT=17 ITER=5418010
+
+
+Waiting for image...
+Predicted digit = 6
+
+TIMING us: RX=8484352 DNN=2988 PRINT=18 ITER=8487359
+
+
+Waiting for image...
+Predicted digit = 7
+
+TIMING us: RX=4469596 DNN=2988 PRINT=18 ITER=4472603
+
+
+Waiting for image...
+Predicted digit = 8
+
+TIMING us: RX=3300936 DNN=2988 PRINT=18 ITER=3303943
+
+
+Waiting for image...
+Predicted digit = 9
+
+TIMING us: RX=3577633 DNN=2988 PRINT=19 ITER=3580641
+
+
+Waiting for image...
+
+Started
+
+=== LAB5 === DNN on MNIST===
+
+=== GROUP 4 CUSTOM DNN on MNIST===
+
+----------------------------------------
+ Fixed-Point Configuration
+----------------------------------------
+ Mode        : TIP 1 (UART optimization)
+ Input       : Q0.8  (1 byte / pixel)
+ Weights     : Q8.8
+ Bias        : Q8.8
+ Internal QF : 8
+----------------------------------------
+
+
+===== Test image 0 =====
+Expected = 0, Predicted = 0
+
+===== Test image 1 =====
+Expected = 1, Predicted = 1
+
+===== Test image 2 =====
+Expected = 2, Predicted = 2
+
+===== Test image 3 =====
+Expected = 3, Predicted = 3
+
+===== Test image 4 =====
+Expected = 4, Predicted = 4
+
+===== Test image 5 =====
+Expected = 5, Predicted = 3
+
+===== Test image 6 =====
+Expected = 6, Predicted = 6
+
+===== Test image 7 =====
+Expected = 7, Predicted = 7
+
+===== Test image 8 =====
+Expected = 8, Predicted = 8
+
+===== Test image 9 =====
+Expected = 9, Predicted = 9
+
+Waiting for image...
+Predicted digit = 0
+
+TIMING us: RX=11948640 DNN=2989 PRINT=18 ITER=11951648
+
+
+Waiting for image...
+Predicted digit = 1
+
+TIMING us: RX=3431864 DNN=2988 PRINT=18 ITER=3434871
+
+
+Waiting for image...
+Predicted digit = 2
+
+TIMING us: RX=3197234 DNN=2988 PRINT=17 ITER=3200241
+
+
+Waiting for image...
+Predicted digit = 3
+
+TIMING us: RX=2947756 DNN=2988 PRINT=17 ITER=2950763
+
+
+Waiting for image...
+Predicted digit = 4
+
+TIMING us: RX=3132731 DNN=2988 PRINT=18 ITER=3135738
+
+
+Waiting for image...
+Predicted digit = 3
+
+TIMING us: RX=3086343 DNN=2989 PRINT=18 ITER=3089350
+
+
+Waiting for image...
+Predicted digit = 6
+
+TIMING us: RX=3306767 DNN=2989 PRINT=18 ITER=3309775
+
+
+Waiting for image...
+Predicted digit = 7
+
+TIMING us: RX=3179996 DNN=2989 PRINT=18 ITER=3183004
+
+
+Waiting for image...
+Predicted digit = 8
+
+TIMING us: RX=3462245 DNN=2989 PRINT=18 ITER=3465253
+
+
+Waiting for image...
+Predicted digit = 9
+
+TIMING us: RX=2916565 DNN=2988 PRINT=19 ITER=2919573
+
+
+Waiting for image...
+
+Started
+
+=== LAB5 === DNN on MNIST===
+
+=== GROUP 4 CUSTOM DNN on MNIST===
+
+----------------------------------------
+ Fixed-Point Configuration
+----------------------------------------
+ Mode        : TIP 1 + TIP 2
+ Input       : Q0.8  (1 byte / pixel)
+ Weights     : Q1.7
+ Bias        : Q1.7
+ Internal QF : 7
+----------------------------------------
+
+
+===== Test image 0 =====
+Expected = 0, Predicted = 5
+
+===== Test image 1 =====
+Expected = 1, Predicted = 1
+
+===== Test image 2 =====
+Expected = 2, Predicted = 2
+
+===== Test image 3 =====
+Expected = 3, Predicted = 5
+
+===== Test image 4 =====
+Expected = 4, Predicted = 4
+
+===== Test image 5 =====
+Expected = 5, Predicted = 5
+
+===== Test image 6 =====
+Expected = 6, Predicted = 6
+
+===== Test image 7 =====
+Expected = 7, Predicted = 7
+
+===== Test image 8 =====
+Expected = 8, Predicted = 5
+
+===== Test image 9 =====
+Expected = 9, Predicted = 9
+
+Waiting for image...
+Predicted digit = 0
+
+TIMING us: RX=11134470 DNN=2988 PRINT=18 ITER=11137478
+
+
+Waiting for image...
+Predicted digit = 1
+
+TIMING us: RX=6137062 DNN=2988 PRINT=19 ITER=6140070
+
+
+Waiting for image...
+Predicted digit = 2
+
+TIMING us: RX=2723557 DNN=2989 PRINT=18 ITER=2726564
+
+
+Waiting for image...
+Predicted digit = 3
+
+TIMING us: RX=3369838 DNN=2988 PRINT=18 ITER=3372845
+
+
+Waiting for image...
+Predicted digit = 4
+
+TIMING us: RX=3087430 DNN=2988 PRINT=19 ITER=3090437
+
+
+Waiting for image...
+Predicted digit = 0
+
+TIMING us: RX=3883511 DNN=2989 PRINT=17 ITER=3886518
+
+
+Waiting for image...
+Predicted digit = 6
+
+TIMING us: RX=3416225 DNN=2988 PRINT=18 ITER=3419231
+
+
+Waiting for image...
+Predicted digit = 7
+
+TIMING us: RX=3071311 DNN=2988 PRINT=18 ITER=3074319
+
+
+Waiting for image...
+Predicted digit = 8
+
+TIMING us: RX=2838059 DNN=2989 PRINT=18 ITER=2841066
+
+
+Waiting for image...
+Predicted digit = 9
+
+TIMING us: RX=3246022 DNN=2988 PRINT=19 ITER=3249031
+
+
+Waiting for image...

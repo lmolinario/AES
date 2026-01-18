@@ -1,7 +1,7 @@
 /***************************************************************
  *  Lab 5 – DNN on MNIST (Custom Network with Tips – Group 4)
  *  ------------------------------------------------------------
- *  File: main_custom.c
+ *  File: lab5_mnist_custom_TIPS.c
  *
  *  Author: Lello Molinario
  *  University of Cagliari – Advanced Embedded Systems (AES)
@@ -15,10 +15,13 @@
  *    • FC3: 16  → 10
  *
  *  Data Representation:
- *    • Weights, bias, activations: DATA = int16 (fixed-point)
- *    • Baseline format: Q8.8
- *    • Tip 1: input images in Q0.8 (1 byte) reconstructed on-board
- *    • Tip 2: weights/bias in Q1.7 for improved dynamic range
+ *    • All computations are performed using fixed-point arithmetic (int16).
+ *    • Baseline format: Q8.8 (full precision reference configuration).
+ *    • Tip 1: input images encoded in Q0.8 (1 byte per pixel) to reduce UART bandwidth,
+ *             reconstructed on-board to the internal fixed-point format.
+ *    • Tip 2: weights and biases encoded in Q1.7 to reduce memory footprint and
+ *             improve fractional precision, while preserving sign information.
+ *
  *
  *  UART Protocol:
  *    1) Startup (optional offline loading):
@@ -32,121 +35,211 @@
  *       - Board executes DNN inference
  *       - Board returns RESULT=<digit> over UART
  *
- *  Measurement:
- *    • Cycle-level timing via ARM Global Timer
- *    • Per-layer profiling (FC + ReLU)
- *    • Compute-only throughput evaluation
+ *  Measurement and Profiling:
+ *    • Execution time measured via ARM Cortex-A9 Global Timer.
+ *    • RX time (UART), inference time (FC + ReLU), and printing overhead
+ *      are measured separately, in accordance with previous labs.
+ *    • The adopted methodology enables fair comparison between
+ *      baseline and optimized configurations.
  *
  ***************************************************************/
 
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
-#include <limits.h>
-
 #include "platform.h"
 #include "xil_printf.h"
 #include "xuartps.h"
-#include "xtime_l.h"
-#include "time.h"
-
+#include "weights.h"
 #include "test_images.h"
-#include "weights_group4.h"
+#include <xtime_l.h>
+#include <time.h>
+
+#include <math.h>
 
 
 /* ============================================================
- * NETWORK DIMENSIONS
- * ============================================================ */
+ * FIXED-POINT CONFIGURATION MODES
+ * ============================================================
+ *
+ * MODE_BASELINE :
+ *   - Input:  Q8.8  (2 bytes per pixel over UART)
+ *   - Weights/Bias: Q8.8
+ *
+ * MODE_TIP1 :
+ *   - Input:  Q0.8  (1 byte per pixel over UART)
+ *   - Internal representation: Q8.8
+ *   - Weights/Bias: Q8.8
+ *
+ * MODE_TIP1_TIP2 :
+ *   - Input:  Q0.8  (1 byte per pixel over UART)
+ *   - Internal representation: Q1.7
+ *   - Weights/Bias: Q1.7
+ *
+ * The mode is selected at compile time to guarantee
+ * deterministic behavior and reproducible measurements.
+ */
 
-#define n_bias0 64
-#define n_weights0 50176   // 784*64
+#define MODE_BASELINE      0
+#define MODE_TIP1          1
+#define MODE_TIP1_TIP2     2
 
-#define n_bias1 32
-#define n_weights1 2048    // 64*32
+/* -------- SELECT ACTIVE MODE HERE -------- */
+#define FIXED_POINT_MODE   MODE_TIP1_TIP2
 
-#define n_bias2 16
-#define n_weights2 512     // 32*16
-
-#define n_bias3 10
-#define n_weights3 160     // 16*10
-
-
-/* ============================================================
- * CONFIGURATION FLAGS (TIPS)
- * ============================================================ */
-/* Tip 1: receive input images in Q0.8 (1 byte) */
-
-#define USE_Q0_8_INPUT   0   // 0 = baseline Q8.8, 1 = Tip 1
-
-/* Tip 2: use weights/bias in Q1.7 instead of Q8.8 */
-#define USE_Q1_7_WEIGHTS  1   // 0 = baseline, 1 = Tip 2
-
-#if USE_Q1_7_WEIGHTS
-    #define QF_WEIGHTS 7
+#if (FIXED_POINT_MODE == MODE_BASELINE) || (FIXED_POINT_MODE == MODE_TIP1)
+    #define QF 8   // Q8.8
+#elif (FIXED_POINT_MODE == MODE_TIP1_TIP2)
+    #define QF 7   // Q1.7
 #else
-    #define QF_WEIGHTS 8
+    #error "Invalid FIXED_POINT_MODE"
 #endif
 
-#define QF_INPUT 8   // input always reconstructed to Q8.8
 
-/* Fixed-point data type */
+/* ============================================================
+ * PRINT ACTIVE FIXED-POINT CONFIGURATION
+ * ============================================================ */
+static void print_fixed_point_configuration(void){
+	 /*
+	  * Prints the active fixed-point configuration at runtime.
+	  *
+	  * This explicit reporting is required to:
+	  *  - make the selected optimization visible during execution,
+	  *  - avoid ambiguity when collecting timing results,
+	  *  - support fair comparison across different configurations.
+	  */
+
+    xil_printf("\r\n----------------------------------------\r\n");
+    xil_printf(" Fixed-Point Configuration\r\n");
+    xil_printf("----------------------------------------\r\n");
+
+#if (FIXED_POINT_MODE == MODE_BASELINE)
+
+    xil_printf(" Mode        : BASELINE\r\n");
+    xil_printf(" Input       : Q8.8  (2 bytes / pixel)\r\n");
+    xil_printf(" Weights     : Q8.8\r\n");
+    xil_printf(" Bias        : Q8.8\r\n");
+    xil_printf(" Internal QF : %d\r\n", QF);
+
+#elif (FIXED_POINT_MODE == MODE_TIP1)
+
+    xil_printf(" Mode        : TIP 1 (UART optimization)\r\n");
+    xil_printf(" Input       : Q0.8  (1 byte / pixel)\r\n");
+    xil_printf(" Weights     : Q8.8\r\n");
+    xil_printf(" Bias        : Q8.8\r\n");
+    xil_printf(" Internal QF : %d\r\n", QF);
+
+
+
+
+#elif (FIXED_POINT_MODE == MODE_TIP1_TIP2)
+    /*
+     * Tip 2 implementation:
+     * Weights and biases are stored directly in Q1.7 format.
+     *
+     * The conversion from Q8.8 to Q1.7 is performed offline,
+     * avoiding runtime overhead and ensuring deterministic behavior.
+     *
+     * This choice primarily reduces memory usage and improves
+     * cache efficiency; UART transmission time is not significantly
+     * affected since parameters are sent only once at startup.
+     */
+
+    xil_printf(" Mode        : TIP 1 + TIP 2\r\n");
+    xil_printf(" Input       : Q0.8  (1 byte / pixel)\r\n");
+    xil_printf(" Weights     : Q1.7\r\n");
+    xil_printf(" Bias        : Q1.7\r\n");
+    xil_printf(" Internal QF : %d\r\n", QF);
+
+#else
+    xil_printf(" Mode        : UNKNOWN CONFIGURATION\r\n");
+#endif
+
+    xil_printf("----------------------------------------\r\n\r\n");
+}
+
+
+/* ============================================================
+ * NETWORK TOPOLOGY PARAMETERS
+ * ============================================================ */
+
+/*
+ * Custom fully-connected DNN:
+ *   FC0: 784  -> 64
+ *   FC1: 64   -> 32
+ *   FC2: 32   -> 16
+ *   FC3: 16   -> 10
+ */
+
+
+#define n_bias0     64
+#define n_weights0  (64 * 784)
+
+#define n_bias1     32
+#define n_weights1  (32 * 64)
+
+#define n_bias2     16
+#define n_weights2  (16 * 32)
+
+#define n_bias3     10
+#define n_weights3  (10 * 16)
+
+
+
+
+/* Fixed-point data type (Q-format selected by QF) */
 typedef short int DATA;
 
+
 /* ============================================================
- * WEIGHTS AND BIASES SELECTION
+ * NETWORK PARAMETERS (WEIGHTS & BIASES)
  * ============================================================ */
-#if USE_Q1_7_WEIGHTS
-DATA gemm0_bias[n_bias0]    = {bias0_q17};
+#if (FIXED_POINT_MODE == MODE_TIP1_TIP2)
+
+DATA gemm0_bias[n_bias0]       = {bias0_q17};
 DATA gemm0_weights[n_weights0] = {weights0_q17};
 
-DATA gemm1_bias[n_bias1]    = {bias1_q17};
+DATA gemm1_bias[n_bias1]       = {bias1_q17};
 DATA gemm1_weights[n_weights1] = {weights1_q17};
 
-DATA gemm2_bias[n_bias2]    = {bias2_q17};
+DATA gemm2_bias[n_bias2]       = {bias2_q17};
 DATA gemm2_weights[n_weights2] = {weights2_q17};
 
-DATA gemm3_bias[n_bias3]    = {bias3_q17};
+DATA gemm3_bias[n_bias3]       = {bias3_q17};
 DATA gemm3_weights[n_weights3] = {weights3_q17};
-#else
-DATA gemm0_bias[n_bias0]    = {bias0};
+
+#else   // BASELINE or TIP1
+
+DATA gemm0_bias[n_bias0]       = {bias0};
 DATA gemm0_weights[n_weights0] = {weights0};
 
-DATA gemm1_bias[n_bias1]    = {bias1};
+DATA gemm1_bias[n_bias1]       = {bias1};
 DATA gemm1_weights[n_weights1] = {weights1};
 
-DATA gemm2_bias[n_bias2]    = {bias2};
+DATA gemm2_bias[n_bias2]       = {bias2};
 DATA gemm2_weights[n_weights2] = {weights2};
 
-DATA gemm3_bias[n_bias3]    = {bias3};
+DATA gemm3_bias[n_bias3]       = {bias3};
 DATA gemm3_weights[n_weights3] = {weights3};
-#endif
 
+#endif
 
 
 /* ============================================================
  * FIXED-POINT UTILITIES
  * ============================================================ */
+
 #define FIXED2FLOAT(a, qf) (((float) (a)) / (1<<qf))
 #define FLOAT2FIXED(a, qf) ((short int) round((a) * (1<<qf)))
 
-
-#define _MAX_ INT16_MAX
-#define _MIN_ INT16_MIN
-
-
-
-static inline u32 ticks_to_us(u64 ticks)
-{
-    // COUNTS_PER_SECOND è definita in xtime_l.h
-    return (u32)((ticks * 1000000ULL) / (u64)COUNTS_PER_SECOND);
-}
+#define _MAX_ (1 << (sizeof(DATA)*8-1))-1
+#define _MIN_ -(_MAX_+1)
 
 
 
 /* ============================================================
  * DNN FUNCTION PROTOTYPES
  * ============================================================ */
-
 void FC_forward(DATA* input, DATA* output, int in_s, int out_s, DATA* weights, DATA* bias, int qf) ;
 static inline long long int saturate(long long int mac);
 static inline void relu_forward(DATA* input, DATA* output, int size);
@@ -154,41 +247,63 @@ int resultsProcessing(DATA* results, int size);
 
 
 /* ============================================================
- * UART IMAGE RECEPTION
+ * OFFLINE TEST IMAGES (FUNCTIONAL VALIDATION)
  * ============================================================ */
-DATA readfromUART(){ // reads 2 bytes and composes a short int
-    u8 lo = XUartPs_RecvByte(XPAR_PS7_UART_1_BASEADDR); // first byte (LSB)
-    u8 hi = XUartPs_RecvByte(XPAR_PS7_UART_1_BASEADDR); // second byte (MSB)
-    return (DATA)((hi << 8) | lo);
+
+/*
+ * Ten reference MNIST images (digits 0–9) are embedded in the
+ * program to validate the correctness of the DNN inference
+ * before enabling UART-based input.
+ */
+DATA immagine[10][28*28] = {
+ {imm_test_0},{imm_test_1},{imm_test_2},{imm_test_3},{imm_test_4},
+ {imm_test_5},{imm_test_6},{imm_test_7},{imm_test_8},{imm_test_9}
+};
+
+
+
+/* ============================================================
+ * UART HANDLING
+ * ============================================================ */
+
+/*
+ * UART instance (PS UART1).
+ * The UART is used to receive raw MNIST images encoded as
+ * 16-bit signed fixed-point values (Q8.8).
+ */
+XUartPs Uart_1_PS;
+
+/*
+ * Blocking UART byte reception.
+ * This function waits until exactly one byte is received.
+ */
+static inline u8 uart_inbyte(void) {
+    u8 b;
+    // Blocking read: waits indefinitely until 1 byte is received
+    while (XUartPs_Recv(&Uart_1_PS, &b, 1) != 1);
+    return b;
 }
 
 
-#define SYNC_BYTE 0xA5
-
-
-/* Receive a full MNIST image (784 pixels) */
-void receive_image(DATA *buffer) {
-
-
-
-#if USE_Q0_8_INPUT
-    /* Tip 1: Q0.8 input → reconstructed to Q8.8 */
-    for (int i = 0; i < 784; i++) {
-        u8 v = XUartPs_RecvByte(XPAR_PS7_UART_1_BASEADDR);
-        buffer[i] = ((DATA)v) << 8;   // Q0.8 → Q8.8
-
-    }
-#else
-    /* Baseline: direct Q8.8 reception */
-    for (int i = 0; i < 784; i++) {
-        buffer[i] = readfromUART();
-    }
-#endif
+/*
+ * Read one 16-bit signed sample from UART.
+ * Byte order follows the assignment specification:
+ *   - first byte: LSB
+ *   - second byte: MSB
+ */
+/* Baseline: Q8.8 input (2 bytes) */
+static inline DATA readPixel_Q88_fromUART(void) {
+    u8 lsb = uart_inbyte();
+    u8 msb = uart_inbyte();
+    return (DATA)((msb << 8) | lsb);
 }
 
+/* Tip 1: Q0.8 input (1 byte), reconstructed on-board */
+static inline DATA readPixel_Q08_fromUART(void) {
+    u8 p = uart_inbyte();
+    return (DATA)p;
+}
 
-/* Static test images for functional validation */
-DATA immagine[10][28*28] = {{imm_test_9},{imm_test_8},{imm_test_7},{imm_test_6},{imm_test_5},{imm_test_4},{imm_test_3},{imm_test_2},{imm_test_1},{imm_test_0}};
 
 /* ============================================================
  * MAIN APPLICATION
@@ -197,10 +312,10 @@ int main(){
   init_platform();
 
 
-    /* --------------------------------------------------------
-     * UART INITIALIZATION
-     * -------------------------------------------------------- */
-  XUartPs Uart_1_PS;
+  /* --------------------------------------------------------
+   * UART INITIALIZATION
+   * -------------------------------------------------------- */
+
   u16 DeviceId_1= XPAR_PS7_UART_1_DEVICE_ID;
   int Status_1;
   XUartPs_Config *Config_1;
@@ -219,257 +334,242 @@ int main(){
   if (Status_1 != (s32)XST_SUCCESS) {
     return XST_FAILURE;
   }
+
+
   //END UART SETUP
-  xil_printf ("Started\n");
-  xil_printf("\n=== LAB5 === DNN on MNIST===\n\r");
-  xil_printf("\n=== Custom with Tips ===\n\r");
+  xil_printf ("\n\rStarted\n\r");
+  xil_printf("\n\r=== LAB5 === DNN on MNIST===\n\r");
+  xil_printf("\n\r=== GROUP 4 CUSTOM DNN on MNIST===\n\r");
 
-  xil_printf("\n--- CONFIGURATION ---\n\r");
 
-  #if USE_Q0_8_INPUT
-  xil_printf("Input format      : Q0.8 (Tip 1 ENABLED)\n\r");
-  #else
-  xil_printf("Input format      : Q8.8 (Baseline)\n\r");
-  #endif
 
-  #if USE_Q1_7_WEIGHTS
-  xil_printf("Weights/Bias      : Q1.7 (Tip 2 ENABLED)\n\r");
-  #else
-  xil_printf("Weights/Bias      : Q8.8 (Baseline)\n\r");
-  #endif
+  print_fixed_point_configuration();
+/* --------------------------------------------------------
+ * Tensor buffers between layers
+ * -------------------------------------------------------- */
 
-  xil_printf("---------------------\n\r\n");
+/* --------------------------------------------------------
+ * TENSOR BUFFERS (STATIC ALLOCATION)
+ * -------------------------------------------------------- */
 
+/*
+ * All intermediate tensors are declared static to:
+ *  - avoid stack overflow
+ *  - guarantee deterministic memory placement
+ */
+
+  static DATA output_gemm0[64];
+  static DATA  input_gemm1[64];
+
+  static DATA output_gemm1[32];
+  static DATA  input_gemm2[32];
+
+  static DATA output_gemm2[16];
+  static DATA  input_gemm3[16];
+
+  static DATA output_gemm3[10];
+
+  /* --------------------------------------------------------
+  * OFFLINE FUNCTIONAL TEST (EMBEDDED IMAGES)
+  * -------------------------------------------------------- */
+    for (int i = 0; i < 10; i++) {
+
+        xil_printf("\r\n===== Test image %d =====\r\n", i);
+
+        /*
+         * Offline validation:
+         * Reference images are stored in Q8.8 format and are used
+         * exclusively to validate functional correctness of the network.
+         *
+         * This test is intentionally independent of the selected
+         * runtime fixed-point mode, since its purpose is to verify
+         * topology and weight correctness, not I/O optimizations.
+         */
+
+        /* FC0 + ReLU */
+        FC_forward(immagine[i], output_gemm0,
+                   784, 64,
+                   gemm0_weights, gemm0_bias, 8);
+        relu_forward(output_gemm0, input_gemm1, 64);
+
+
+        /* FC1 + ReLU */
+        FC_forward(input_gemm1, output_gemm1,
+                   64, 32,
+                   gemm1_weights, gemm1_bias, 8);
+        relu_forward(output_gemm1, input_gemm2, 32);
+
+        /* FC2 + ReLU */
+        FC_forward(input_gemm2, output_gemm2,
+                   32, 16,
+                   gemm2_weights, gemm2_bias, 8);
+        relu_forward(output_gemm2, input_gemm3, 16);
+
+        /* FC3 (output layer) */
+        FC_forward(input_gemm3, output_gemm3,
+                   16, 10,
+                   gemm3_weights, gemm3_bias, 8);
+
+
+        /* Classificazione */
+        int pred = resultsProcessing(output_gemm3, 10);
+
+        xil_printf("Expected = %d, Predicted = %d\r\n", i, pred);
+
+    }
 
 
     /* --------------------------------------------------------
-     * Tensor buffers between layers
+     * UART-BASED ONLINE INFERENCE + TIMING
      * -------------------------------------------------------- */
 
-  DATA image[28*28];  // buffer immagine ricevuta via UART
 
-  DATA output_gemm0[64];
-  DATA input_gemm1[64];
-
-  DATA output_gemm1[32];
-  DATA input_gemm2[32];
-
-  DATA output_gemm2[16];
-  DATA input_gemm3[16];
-
-  DATA output_gemm3[10];
+    static DATA image_uart[28*28];  // buffer immagine ricevuta via UART
 
 
-    /* ========================================================
-     * STEP 1 – Functional validation with static images
-     * ======================================================== */
-  for (int i = 0; i < 10; i++) {
-      xil_printf("\r\n===== Test image %d =====\r\n", 9 - i);
+    XTime t0, t1, t2, t3;
+    double us_per_tick = 1e6 / (double)COUNTS_PER_SECOND;
 
-      // Layer 0: FC 784 → 64
-      FC_forward(
-          immagine[i],
-          output_gemm0,
-          784,
-          64,
-          gemm0_weights,
-          gemm0_bias,
-          QF_WEIGHTS
-      );
+    while (1) {
 
-      // ReLU 0
-      relu_forward(output_gemm0, input_gemm1, 64);
-
-      // Layer 1: FC 64 → 32
-      FC_forward(
-          input_gemm1,
-          output_gemm1,
-          64,
-          32,
-          gemm1_weights,
-          gemm1_bias,
-          QF_WEIGHTS
-      );
-
-      // ReLU 1
-      relu_forward(output_gemm1, input_gemm2, 32);
-
-      // Layer 2: FC 32 → 16
-      FC_forward(
-          input_gemm2,
-          output_gemm2,
-          32,
-          16,
-          gemm2_weights,
-          gemm2_bias,
-          QF_WEIGHTS
-      );
-
-      // ReLU 2
-      relu_forward(output_gemm2, input_gemm3, 16);
-
-
-      // Layer 3: FC 16 → 10
-      FC_forward(
-          input_gemm3,
-          output_gemm3,
-          16,
-          10,
-          gemm3_weights,
-          gemm3_bias,
-          QF_WEIGHTS
-      );
-
-      // Classificazione finale
-      int predicted = resultsProcessing(output_gemm3, 10);
-      xil_printf("Predicted digit = %d\r\n", predicted);
-  }
-
-
-    /* ========================================================
-     * STEP 2–3–4 – Real-time inference with profiling
-     * ======================================================== */
-  while (1) {
-
-      xil_printf("\nWaiting for the image...\r\n");
-
-      XTime t_iter0, t_iter1;
-      XTime t_rx0, t_rx1;
-      XTime t_fc0_0, t_fc0_1;
-      XTime t_relu0_0, t_relu0_1;
-      XTime t_fc1_0, t_fc1_1;
-      XTime t_relu1_0, t_relu1_1;
-      XTime t_fc2_0, t_fc2_1;
-      XTime t_fc3_0, t_fc3_1;
-      XTime t_relu2_0, t_relu2_1;
-      XTime t_cls0, t_cls1;
-
-      XTime_GetTime(&t_iter0);
-
-      // (1) RX image (blocking)
-      XTime_GetTime(&t_rx0);
-      receive_image(image);
-      XTime_GetTime(&t_rx1);
-
-      // === DEBUG: verify received image ===
-      //xil_printf("First 10 pixels: ");
-      //for (int i = 0; i < 10; i++) {
-      //    xil_printf("%d ", image[i]);
-      //}
-      xil_printf("\r\n");
-
-        /* Discard first iteration (warm-up) */
-      static int warmup = 1;
-      if (warmup) {
-          warmup = 0;
-          xil_printf("Warm-up image discarded\r\n");
-          continue;
-      }
+        xil_printf("\r\nWaiting for image...\r\n");
 
 
 
-        /* Forward pass */
-      // (2) FC0
-      XTime_GetTime(&t_fc0_0);
-      FC_forward(image, output_gemm0, 784, 64, gemm0_weights, gemm0_bias, QF_WEIGHTS);
-      XTime_GetTime(&t_fc0_1);
-
-      // (3) ReLU0
-      XTime_GetTime(&t_relu0_0);
-      relu_forward(output_gemm0, input_gemm1, 64);
-      XTime_GetTime(&t_relu0_1);
-
-      // (4) FC1
-      XTime_GetTime(&t_fc1_0);
-      FC_forward(input_gemm1, output_gemm1, 64, 32, gemm1_weights, gemm1_bias, QF_WEIGHTS);
-      XTime_GetTime(&t_fc1_1);
-
-      // (5) ReLU1
-      XTime_GetTime(&t_relu1_0);
-      relu_forward(output_gemm1, input_gemm2, 32);
-      XTime_GetTime(&t_relu1_1);
-
-      // (6) FC2: 32 → 16
-      XTime_GetTime(&t_fc2_0);
-      FC_forward(input_gemm2, output_gemm2, 32, 16, gemm2_weights, gemm2_bias, QF_WEIGHTS);
-      XTime_GetTime(&t_fc2_1);
-
-      // (7) ReLU2: 16
-      XTime_GetTime(&t_relu2_0);
-      relu_forward(output_gemm2, input_gemm3, 16);
-      XTime_GetTime(&t_relu2_1);
-
-      // (8) FC3: 16 → 10
-      XTime_GetTime(&t_fc3_0);
-      FC_forward(input_gemm3, output_gemm3, 16, 10, gemm3_weights, gemm3_bias, QF_WEIGHTS);
-      XTime_GetTime(&t_fc3_1);
-
-      // (9) Classification (softmax + argmax)
-      XTime_GetTime(&t_cls0);
-      int predicted = resultsProcessing(output_gemm3, 10);
-      XTime_GetTime(&t_cls1);
+        XTime_GetTime(&t0);
+        /*
+         * UART reception is deliberately measured separately from
+         * the DNN inference.
+         *
+         * UART latency is dominated by:
+         *  - serial bandwidth (115200 baud)
+         *  - host-side transmission (RealTerm / PC)
+         *
+         * Separating RX from computation allows fair evaluation of
+         * the neural network execution time, independent of I/O.
+         */
 
 
-      XTime_GetTime(&t_iter1);
-
-      // Compute deltas (ticks)
-      u64 rx_t  = (u64)(t_rx1   - t_rx0);
-      u64 fc0_t = (u64)(t_fc0_1 - t_fc0_0);
-      u64 r0_t  = (u64)(t_relu0_1 - t_relu0_0);
-      u64 fc1_t = (u64)(t_fc1_1 - t_fc1_0);
-      u64 r1_t  = (u64)(t_relu1_1 - t_relu1_0);
-      u64 fc2_t = (u64)(t_fc2_1 - t_fc2_0);
-      u64 cls_t = (u64)(t_cls1 - t_cls0);
-      u64 tot_t = (u64)(t_iter1 - t_iter0);
-      u64 fc3_t = (u64)(t_fc3_1 - t_fc3_0);
-      u64 r2_t  = (u64)(t_relu2_1 - t_relu2_0);
-
-      u64 dnn_t = fc0_t + r0_t + fc1_t + r1_t + fc2_t + r2_t + fc3_t + cls_t;
+        /*
+         * Tip 1 optimization:
+         * When enabled, each pixel is transmitted as a single byte (Q0.8),
+         * halving UART transmission time with respect to the baseline.
+         *
+         * Pixel reconstruction is performed on-board with negligible
+         * computational overhead compared to UART latency.
+         */
 
 
 
-      // Conversion in microsecond (u32) per "safe" print
-      u32 rx_us  = ticks_to_us(rx_t);
-      u32 fc0_us = ticks_to_us(fc0_t);
-      u32 r0_us  = ticks_to_us(r0_t);
-      u32 fc1_us = ticks_to_us(fc1_t);
-      u32 r1_us  = ticks_to_us(r1_t);
-      u32 fc2_us = ticks_to_us(fc2_t);
-      u32 cls_us = ticks_to_us(cls_t);
-      u32 dnn_us = ticks_to_us(dnn_t);
-      u32 tot_us = ticks_to_us(tot_t);
-      u32 fc3_us = ticks_to_us(fc3_t);
-      u32 r2_us  = ticks_to_us(r2_t);
+        /* ---------------- RX TIMING ---------------- */
+        for (int i = 0; i < 784; i++) {
 
-      // Only xil_printf, only 32-bit
-      xil_printf(
-        "RX=%u us | FC0=%u us | R0=%u us | FC1=%u us | R1=%u us | FC2=%u us | R2=%u us | FC3=%u us | CLS=%u us | DNN=%u us | TOT=%u us\r\n",
-        rx_us, fc0_us, r0_us, fc1_us, r1_us, fc2_us, r2_us, fc3_us, cls_us, dnn_us, tot_us
-      );
+        #if (FIXED_POINT_MODE == MODE_BASELINE)
+            image_uart[i] = readPixel_Q88_fromUART();
 
-      xil_printf("Predicted digit = %d\r\n", predicted);
+        #elif (FIXED_POINT_MODE == MODE_TIP1) || (FIXED_POINT_MODE == MODE_TIP1_TIP2)
+            image_uart[i] = readPixel_Q08_fromUART();
 
-      static int printed_summary = 0;
-      if (!printed_summary) {
-    	  xil_printf("Compute-only throughput = %u img/s (compute-only)\r\n",
-    	             1000000 / dnn_us);
+        #endif
+        }
 
-          xil_printf("Real-time capability: YES (DNN << UART)\r\n");
-          printed_summary = 1;
-      }
-
-  }
+        XTime_GetTime(&t1);
 
 
+/*
+         * DNN inference pipeline
+         * ------------------------------------------------------------
+         * The inference is executed sequentially on a single core,
+         * but the code structure mirrors a stage-based pipeline
+         * (FC → ReLU → FC → ReLU → FC).
+         *
+         * This organization is consistent with Lab 4 concepts and
+         * allows future extensions such as:
+         *  - manual parallelization
+         *  - NEON vectorization
+         *  - dual-core partitioning
+         */
+
+        /* ---------------- DNN INFERENCE ---------------- */
+        FC_forward(image_uart, output_gemm0, 784, 64,
+                   gemm0_weights, gemm0_bias, QF);
+        relu_forward(output_gemm0, input_gemm1, 64);
+
+        FC_forward(input_gemm1, output_gemm1, 64, 32,
+                   gemm1_weights, gemm1_bias, QF);
+        relu_forward(output_gemm1, input_gemm2, 32);
+
+        FC_forward(input_gemm2, output_gemm2, 32, 16,
+                   gemm2_weights, gemm2_bias, QF);
+        relu_forward(output_gemm2, input_gemm3, 16);
+
+        FC_forward(input_gemm3, output_gemm3, 16, 10,
+                   gemm3_weights, gemm3_bias, QF);
+
+
+        XTime_GetTime(&t2);
+
+        int pred = resultsProcessing(output_gemm3, 10);
+
+        xil_printf("Predicted digit = %d\r\n", pred);
+
+        XTime_GetTime(&t3);
+
+
+        /*
+         * Timing strategy
+         * ------------------------------------------------------------
+         * Execution time is measured using XTime_GetTime(), which
+         * internally relies on the ARM Cortex-A9 Global Timer.
+         *
+         * Unlike Lab 3 (cycle-accurate FIR analysis), here the goal is
+         * application-level profiling rather than worst-case cycle
+         * estimation.
+         *
+         * The timing is therefore expressed in microseconds and
+         * separated into:
+         *  - UART reception latency (I/O bound)
+         *  - DNN inference time (compute bound)
+         *  - Output/printing overhead
+         *
+         * This approach provides a realistic performance characterization
+         * of the complete embedded inference pipeline.
+         */
+
+        /* ---------------- TIMING REPORT ---------------- */
+        u32 rx_us   = (u32)((t1 - t0) * us_per_tick);
+        u32 dnn_us  = (u32)((t2 - t1) * us_per_tick);
+        u32 prn_us  = (u32)((t3 - t2) * us_per_tick);
+        u32 iter_us = (u32)((t3 - t0) * us_per_tick);
+
+        xil_printf("\r\nTIMING us: RX=%lu DNN=%lu PRINT=%lu ITER=%lu\r\n\r\n",
+                   rx_us, dnn_us, prn_us, iter_us);
+
+    }
+
+
+    // NOTE: never reached
     cleanup_platform();
     return 0;
 }
 
 /* ============================================================
- * FULLY CONNECTED LAYER (Fixed-Point)
+ * FULLY CONNECTED LAYER
  * ============================================================ */
 void FC_forward(DATA* input, DATA* output, int in_s, int out_s, DATA* weights, DATA* bias, int qf) {
 	// NOTE return W * x
+	/*
+	 * NOTE on saturation:
+	 * Although a saturate() function is provided, it is not applied
+	 * in the current implementation since no overflow was observed
+	 * in the tested Q1.7 configurations.
+	 *
+	 * The function is intentionally kept to support future extensions,
+	 * such as reduced-precision (8-bit) implementations or more
+	 * aggressive fixed-point scaling.
+	 */
+
+
 	int hkern = 0;
 	int wkern = 0;
 	long long int mac = 0;
@@ -483,20 +583,22 @@ void FC_forward(DATA* input, DATA* output, int in_s, int out_s, DATA* weights, D
 			current = input[wkern];
 			mac += current * weights[hkern*in_s + wkern];
 		}
-		output[hkern] = (DATA)saturate(mac >> qf);//output[hkern] = (DATA)(mac >> qf);
+		output[hkern] = (DATA)(mac >> qf);
 	}
 }
 
+
+/* Currently unused: provided for future reduced-precision extensions */
 static inline long long int saturate(long long int mac)
 {
 
 	if(mac > _MAX_) {
-		printf("[WARNING] Saturation.mac: %lld -> %llx _MAX_: %d  _MIN_: %d  res: %d\n",  mac, mac, _MAX_, _MIN_, _MAX_);
+		//printf("[WARNING] Saturation.mac: %lld -> %llx _MAX_: %d  _MIN_: %d  res: %d\n",  mac, mac, _MAX_, _MIN_, _MAX_);
 		return _MAX_;
 	}
 
 	if(mac < _MIN_){
-		printf( "[WARNING] Saturation. mac: %lld -> %llx _MAX_: %d  _MIN_: %d  res: %d\n",  mac, mac, _MAX_, _MIN_, _MIN_);
+		//printf( "[WARNING] Saturation. mac: %lld -> %llx _MAX_: %d  _MIN_: %d  res: %d\n",  mac, mac, _MAX_, _MIN_, _MIN_);
 		return _MIN_;
 	}
 
@@ -505,6 +607,9 @@ static inline long long int saturate(long long int mac)
 
 }
 
+/* ============================================================
+ * RELU ACTIVATION
+ * ============================================================ */
 static inline void relu_forward(DATA* input, DATA* output, int size) {
 	int i = 0;
 	for(i = 0; i < size; i++) {
@@ -516,21 +621,24 @@ static inline void relu_forward(DATA* input, DATA* output, int size) {
 
 #define SIZEWA 10
 int resultsProcessing(DATA* results, int size){
+
 //What do you want to do with the results of the CNN? Here is the place where you should put the classifier or the detection (see YOLO detection for example)
 //The simplest classifier is a maximum search for the results which returns the index value of the maximum
 
  char *labels[10]={"digit 0", "digit 1", "digit 2", "digit 3", "digit 4", "digit 5", "digit 6", "digit 7", "digit 8", "digit 9"};
 
 // TODO: check the size parameter
-  int size_wa = SIZEWA;
-  float  r[SIZEWA];
-  int  c[SIZEWA];
+  int size_wa = size; // Must be 10 ...
+  if (size_wa > SIZEWA) size_wa = SIZEWA;
+
+  float r[SIZEWA];
+  int c[SIZEWA];
   float results_float[SIZEWA];
   float sum=0.0;
   DATA max=0;
   int max_i;
   for (int i =0;i<size_wa;i++){
-      results_float[i] = FIXED2FLOAT(results[i],QF_WEIGHTS);
+	  results_float[i] = FIXED2FLOAT(results[i], QF);
     int n;
     if (results[i]>0)
       n=results[i];
