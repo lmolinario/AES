@@ -35,7 +35,7 @@
  * Larger values (e.g., 1000 or 10000) are used during lab
  * evaluation to analyze scalability and parallel speedup.
  * ============================================================ */
-#define ARRAY_SIZE 10 //default value -  1000 and 10000 for lab evaluation
+#define ARRAY_SIZE 100 //default value -  1000 and 10000 for lab evaluation
 
 /* ============================================================
  * SHARED MEMORY BASE ADDRESS
@@ -65,11 +65,9 @@ typedef struct {
     u32 B[ARRAY_SIZE];
     u32 C[ARRAY_SIZE];
 
-    volatile u32 ready1; // Core 1 ready for parallel section
     volatile u32 start;  // 0 = wait, 1 = go
     volatile u32 done0;  // set by core 0
     volatile u32 done1;  // set by core 1
-
 } shared_mem_t;
 
 

@@ -3,9 +3,11 @@
 This repository contains the full implementation of **Lab 4** for the
 **Advanced Embedded Systems** course (University of Cagliari).
 
-The project explores **task-level parallelism** on the dual-core ARM Cortex-A9
-of the **Zybo Z7** board and **data-level parallelism (SIMD)** through compiler
-auto-vectorization using **ARM NEON** instructions.
+The project explores task-level parallelism on the dual-core ARM Cortex-A9
+(Core 0 / Core 1 cooperation) and data-level parallelism (SIMD) through
+compiler auto-vectorization using ARM NEON instructions applied to the
+serial baseline.
+
 
 The application performs vector addition both in **serial** and **parallel**
 fashion, measures execution time using the **Global Timer**, and verifies
@@ -28,7 +30,7 @@ where:
    * Core 0 computes the first half
    * Core 1 computes the second half
 5. Synchronization is achieved through shared flags:
-   `start`, `done0`, `done1`
+   `ready1` `start` `done0`, `done1`
 6. Execution time is measured using the **ARM Cortex-A9 Global Timer**
 7. A **serial baseline** is executed to evaluate:
 
@@ -86,6 +88,7 @@ A fixed DDR address is used for shared data:
 #define SHARED_BASE 0x2F100000U
 ```
 
+
 Shared structure definition:
 
 ```c
@@ -94,6 +97,7 @@ typedef struct {
     u32 B[ARRAY_SIZE];
     u32 C[ARRAY_SIZE];
 
+    volatile u32 ready1;
     volatile u32 start;
     volatile u32 done0;
     volatile u32 done1;
@@ -178,6 +182,7 @@ shared-memory behavior.
 * Computes second half of vector **C**
 * Sets `done1 = 1`
 * Enters idle loop
+* Signals readiness via `ready1`
 
 ---
 
@@ -281,18 +286,60 @@ This ensures both cores start simultaneously and correctly.
 
 ## **Execution Time Measurement**
 
-Timing is performed using the **Global Timer**:
+Execution time is measured using the **ARM Cortex-A9 Global Timer**, a
+free-running hardware counter shared between both cores of the Zynq-7000
+processing system.
+
+In this implementation, only the **lower 32 bits** of the Global Timer
+counter are read.  
+This choice is sufficient for the short execution window of the experiment
+and avoids the need to manage 64-bit overflows.
+
+The timer is accessed through the Xilinx BSP base address
+`XPAR_GLOBAL_TMR_BASEADDR`, using an explicit offset of `0x00`, corresponding
+to the lower counter register.
 
 ```c
-t_start = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
-t_end   = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+static inline u32 read_global_timer(void)
+{
+    return Xil_In32(XPAR_GLOBAL_TMR_BASEADDR + 0x00U);
+}
 ```
+Timing measurements are performed by sampling the timer immediately before
+and after the code section under test:
 
-Timer frequency:
+```
+t_start = read_global_timer();
+/* code under measurement */
+t_end   = read_global_timer();
+
+```
+The difference t_end - t_start represents the number of clock cycles
+elapsed during execution.
+
+The Global Timer frequency on the Zybo Z7 platform is approximately:
 
 ```
 Global Timer ≈ 333 MHz
 ```
+All reported execution times are therefore expressed in clock cycles.
+Conversion to absolute time units (e.g., microseconds) is intentionally
+avoided, as the objective of the experiment is a relative performance
+comparison between serial and parallel implementations.
+
+---
+
+## **Notes on Timing Accuracy**
+
+* Instruction and data caches are disabled to ensure deterministic timing
+  and immediate visibility of shared-memory updates.
+* UART output and synchronization via GPIO are kept **outside** the measured
+  timing windows.
+* Both serial and parallel executions are measured using the **same timer
+  source**, ensuring a fair comparison.
+
+---
+
 
 Measured values:
 
@@ -303,6 +350,7 @@ Measured values:
 Measurements are repeated for:
 
 ```
+ARRAY_SIZE = 10
 ARRAY_SIZE = 100
 ARRAY_SIZE = 1000
 ARRAY_SIZE = 10000
@@ -322,25 +370,35 @@ ARRAY_SIZE = 10000
 
 ---
 <p align="center">
-  <img src="../img/lab4/lab4_100.png" alt="Conceptual functionality of convolution" width="650"/>
+  <img src="../img/lab4/lab4_10_5.png" alt="Conceptual functionality of convolution" width="650"/>
+</p>
+<p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
+
+---
+
+---
+<p align="center">
+  <img src="../img/lab4/lab4_100_5.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
 <p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
 
 ---
 ---
 <p align="center">
-  <img src="../img/lab4/lab4_1000.png" alt="Conceptual functionality of convolution" width="650"/>
+  <img src="../img/lab4/lab4_1000_5.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
 <p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
 
 ---
+
 ---
 <p align="center">
-  <img src="../img/lab4/lab4_10000.png" alt="Conceptual functionality of convolution" width="650"/>
+  <img src="../img/lab4/lab4_10000_5.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
 <p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
 
 ---
+
 
 
 
@@ -358,7 +416,7 @@ This behavior is expected on shared-memory systems without private caches.
 ## **Brief Results Summary**
 
 Execution time measurements were performed for different array sizes
-(`ARRAY_SIZE = 100`, `1000`, `10000`) using the ARM Cortex-A9 Global Timer.
+(`ARRAY_SIZE = 10`, `100`, `1000`, `10000`) using the ARM Cortex-A9 Global Timer.
 
 The experimental results show that parallel execution on two cores does not
 provide a significant speedup compared to the serial implementation.

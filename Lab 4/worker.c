@@ -52,36 +52,37 @@ int main(void)
     Xil_ICacheDisable();
     Xil_DCacheDisable();
 
-    xil_printf("Core 1: Waiting for start signal...\r\n");
 
-    while (Xil_In32(XPAR_AXI_GPIO_2_BASEADDR)==0);//wait for the start on button
+    /* Worker-owned flags initialization:
+     * Only reset flags that are owned by Core 1.
+     * Do NOT reset SHARED->start here (master-owned).
+     */
+    SHARED->ready1 = FLAG_RESET;
+    SHARED->done1  = FLAG_RESET;
 
 
-    /* --------------------------------------------------------
-     * Wait for start flag from Core 0
-     * --------------------------------------------------------
-     * Busy-wait synchronization using shared memory.
-     * -------------------------------------------------------- */
-    while (SHARED->start == 0) {
-        // busy-wait
+    /* Optional manual sync via switch (same as master) */
+    while (Xil_In32(XPAR_AXI_GPIO_2_BASEADDR) == 0);
+
+    /* Signal readiness to master */
+    SHARED->ready1 = FLAG_SET;
+
+    //xil_printf("Core 1: Ready. Waiting for START...\r\n");
+
+    /* Wait for start flag from master */
+    while (SHARED->start != FLAG_SET) {
+        /* busy-wait */
     }
 
-//    xil_printf("Core 1: Starting second half computation\r\n");
-
-    /* --------------------------------------------------------
-     * Parallel computation – second half of the vector
-     * --------------------------------------------------------
-     * Each core works on a disjoint data partition, avoiding
-     * data races and the need for additional synchronization.
-     * -------------------------------------------------------- */
+    /* Compute second half of the vector */
     for (i = ARRAY_SIZE / 2; i < ARRAY_SIZE; ++i) {
         SHARED->C[i] = SHARED->A[i] + SHARED->B[i];
     }
 
-    /* --------------------------------------------------------
-     * Signal completion to Core 0
-     * -------------------------------------------------------- */
-    SHARED->done1 = 1;
+
+    /* Signal completion to master */
+    SHARED->done1 = FLAG_SET;
+
 
 //    xil_printf("Core 1: Done.\r\n");
 

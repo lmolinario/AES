@@ -24,15 +24,28 @@
  *
  *  Execution time is measured using the ARM Global Timer
  *  to compute the achieved speedup.
- *
+ * NOTE:
+ * Only the lower 32 bits of the ARM Global Timer are used.
+ * This is sufficient for the short execution window of the
+ * experiment and avoids handling 64-bit overflows.
  *
  ***************************************************************/
+
 #include "xparameters.h"
 #include "xil_cache.h"
 #include "xil_printf.h"
-#include "xtime_l.h"
 #include "shared.h"
 #include "xil_io.h"
+#include "xtime_l.h"
+
+
+
+static inline u32 read_global_timer(void)
+{
+    return Xil_In32(XPAR_GLOBAL_TMR_BASEADDR + 0x00U);
+}
+
+
 
 /* Global timer timestamps */
 u32 t_start, t_end;
@@ -66,9 +79,14 @@ int main(void)
     /* Disable caches for deterministic timing measurements */
     Xil_ICacheDisable();
     Xil_DCacheDisable();
-	print("Started!\n\r");
-    xil_printf("=== LAB 4 === Parallel Vector Add (SERIAL vs PARALLEL)\n\r");
+
+
+    xil_printf("Started!\r\n");
+    xil_printf("=== LAB 4 === Parallel Vector Add (SERIAL vs PARALLEL)\r\n");
        xil_printf("MASTER: ARRAY_SIZE=%d\r\n", ARRAY_SIZE);
+
+
+
 
     /* --------------------------------------------------------
      * Start synchronization via switch
@@ -76,15 +94,18 @@ int main(void)
      * -------------------------------------------------------- */
     while (Xil_In32(XPAR_AXI_GPIO_2_BASEADDR) == 0);
 
-    /* --------------------------------------------------------
-     * Shared-memory flag initialization
-     * --------------------------------------------------------
-     * Shared flags act as a simple software barrier
-     * (cache disabled ⇒ no explicit memory fences required) */
+    	/* --------------------------------------------------------
+	* Shared-memory flag initialization
+	* --------------------------------------------------------
+	* Shared flags act as a simple software barrier
+	* (cache disabled ⇒ no explicit memory fences required) */
 
-    SHARED->start = 0;
-    SHARED->done0 = 0;
-    SHARED->done1 = 0;
+    /* Initialize shared flags */
+    SHARED->start  = FLAG_RESET;
+    SHARED->done0  = FLAG_RESET;
+    SHARED->done1  = FLAG_RESET;
+    SHARED->ready1 = FLAG_RESET;
+
 
     /* --------------------------------------------------------
      * Vector initialization
@@ -100,9 +121,15 @@ int main(void)
      * ======================================================== */
     xil_printf("Core 0: Starting SERIAL version...\r\n");
 
-    t_start = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
-    vec_add_serial(C_serial, SHARED->A, SHARED->B, ARRAY_SIZE);
-    t_end   = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+    /* SERIAL BASELINE */
+    t_start = read_global_timer();
+    vec_add_serial(C_serial,
+               (const u32 *)SHARED->A,
+               (const u32 *)SHARED->B,
+               ARRAY_SIZE);
+
+    t_end   = read_global_timer();
+
 
     u32 serial_cycles = t_end - t_start;
 
@@ -121,31 +148,39 @@ int main(void)
      * ======================================================== */
     xil_printf("Core 0: Starting PARALLEL version...\r\n");
 
-    /* Start timing just before releasing worker core */
-    t_start = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+    /* Wait until worker core is ready */
+    while (SHARED->ready1 != FLAG_SET);
+
+    xil_printf("Master: Worker ready, starting parallel section.\r\n");
+
+
+    /* Timing via ARM Global Timer (32-bit low counter is sufficient
+     * for the measured execution window of this experiment) */
+    t_start = read_global_timer();
 
     /* Notify worker core to start */
-    SHARED->start = 1;
+    SHARED->start = FLAG_SET;
 
     /* Core 0 processes first half of the vector */
     for (i = 0; i < ARRAY_SIZE / 2; ++i) {
         SHARED->C[i] = SHARED->A[i] + SHARED->B[i];
     }
 
-    /* Wait for worker core (Core 1) to complete */
-    SHARED->done0 = 1;
+    SHARED->done0 = FLAG_SET;
+
 
     /* wait worker */
-    while (SHARED->done1 == 0);
-
-    t_end = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+    while (SHARED->done1 != FLAG_SET);
+    t_end = read_global_timer();
 
     u32 parallel_cycles = t_end - t_start;
 
     /* ========================================================
      * RESULTS AND SPEEDUP
      * ======================================================== */
+    if (parallel_cycles == 0) parallel_cycles = 1;
     u32 speedup_x100 = (serial_cycles * 100) / parallel_cycles;
+
 
     xil_printf("\r\n=== TIMING SUMMARY ===\r\n");
     xil_printf("Serial cycles   = %lu\r\n", (unsigned long)serial_cycles);
