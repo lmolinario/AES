@@ -328,8 +328,7 @@ avoided, as the objective of the experiment is a relative performance
 comparison between serial and parallel implementations.
 
 ---
-
-## **Notes on Timing Accuracy**
+ **Notes on Timing Accuracy**
 
 * Instruction and data caches are disabled to ensure deterministic timing
   and immediate visibility of shared-memory updates.
@@ -341,7 +340,7 @@ comparison between serial and parallel implementations.
 ---
 
 
-Measured values:
+## **Measured values:**
 
 * Serial execution cycles
 * Parallel execution cycles
@@ -364,9 +363,8 @@ ARRAY_SIZE = 10000
 <p align="center">
   <img src="../img/lab4/lab4output.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
-<p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
+<p align="center"><i>Output produced by both cores running in parallel (Master + Worker) from Lab Example </i></p>
 
----
 
 ---
 <p align="center">
@@ -375,14 +373,11 @@ ARRAY_SIZE = 10000
 <p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
 
 ---
-
----
 <p align="center">
   <img src="../img/lab4/lab4_100_5.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
 <p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
 
----
 ---
 <p align="center">
   <img src="../img/lab4/lab4_1000_5.png" alt="Conceptual functionality of convolution" width="650"/>
@@ -391,7 +386,6 @@ ARRAY_SIZE = 10000
 
 ---
 
----
 <p align="center">
   <img src="../img/lab4/lab4_10000_5.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
@@ -399,10 +393,6 @@ ARRAY_SIZE = 10000
 
 ---
 
-
-
-
----
 
 ## **Observed Results**
 
