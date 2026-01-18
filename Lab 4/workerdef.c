@@ -31,6 +31,7 @@
 #include "xil_cache.h"
 #include "xil_printf.h"
 #include "shared.h"
+#include "xil_io.h"
 
 
 
@@ -51,19 +52,23 @@ int main(void)
     Xil_ICacheDisable();
     Xil_DCacheDisable();
 
-    /* Ensure completion flag is cleared before starting */
-    SHARED->done1 = 0;
+
+    /* Ensure completion flag is cleared before synchronization */
+    SHARED->ready1 = 0;
+    SHARED->start  = 0;   // opzionale, ma consigliato
+    SHARED->done1  = 0;
 
     xil_printf("Core 1: Waiting for start signal...\r\n");
 
-    while (Xil_In32(XPAR_AXI_GPIO_2_BASEADDR)==0);//wait for the start on button
+    /* Optional hardware-level synchronization via switch
+     * (used to manually align master/worker execution) */
+    while (Xil_In32(XPAR_AXI_GPIO_2_BASEADDR) == 0);
 
+       /* Signal readiness to master */
+    SHARED->ready1 = 1;
 
-    /* --------------------------------------------------------
-     * Wait for start flag from Core 0
-     * --------------------------------------------------------
-     * Busy-wait synchronization using shared memory.
-     * -------------------------------------------------------- */
+/* Wait for start flag from master (Core 0) */
+
     while (SHARED->start == 0) {
         // busy-wait
     }

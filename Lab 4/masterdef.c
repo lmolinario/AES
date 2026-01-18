@@ -30,7 +30,6 @@
 #include "xparameters.h"
 #include "xil_cache.h"
 #include "xil_printf.h"
-#include "xtime_l.h"
 #include "shared.h"
 #include "xil_io.h"
 
@@ -66,19 +65,11 @@ int main(void)
     /* Disable caches for deterministic timing measurements */
     Xil_ICacheDisable();
     Xil_DCacheDisable();
-	xil_printf("Started!\r\n");
+    xil_printf("Started!\r\n");
     xil_printf("=== LAB 4 === Parallel Vector Add (SERIAL vs PARALLEL)\r\n");
        xil_printf("MASTER: ARRAY_SIZE=%d\r\n", ARRAY_SIZE);
 
 
-    /* --------------------------------------------------------
-     * Shared-memory flag initialization
-     * --------------------------------------------------------
-     * Shared flags act as a simple software barrier
-     * (cache disabled ⇒ no explicit memory fences required) */
-
-    SHARED->start = 0;
-    SHARED->done1 = 0;
 
 
     /* --------------------------------------------------------
@@ -86,6 +77,18 @@ int main(void)
      * (used to align experiments manually)
      * -------------------------------------------------------- */
     while (Xil_In32(XPAR_AXI_GPIO_2_BASEADDR) == 0);
+
+    	/* --------------------------------------------------------
+	* Shared-memory flag initialization
+	* --------------------------------------------------------
+	* Shared flags act as a simple software barrier
+	* (cache disabled ⇒ no explicit memory fences required) */
+
+    /* Shared flags init (fresh run) */
+    SHARED->start  = 0;
+    SHARED->done0  = 0;
+    SHARED->done1  = 0;
+    SHARED->ready1 = 0;
 
 
     /* --------------------------------------------------------
@@ -116,9 +119,6 @@ int main(void)
           SHARED->C[i] = 0;
       }
 
-    /* Reset flags for a clean parallel run */
-    SHARED->done1 = 0;
-    SHARED->start = 0;
 
 
     /* ========================================================
@@ -126,7 +126,11 @@ int main(void)
      * ======================================================== */
     xil_printf("Core 0: Starting PARALLEL version...\r\n");
 
-    /* Start timing just before releasing worker core */
+    /* Wait until worker core is ready */
+    while (SHARED->ready1 == 0);
+
+    /* Timing via ARM Global Timer (32-bit low counter is sufficient
+     * for the measured execution window of this experiment) */
     t_start = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
 
     /* Notify worker core to start */
@@ -136,6 +140,8 @@ int main(void)
     for (i = 0; i < ARRAY_SIZE / 2; ++i) {
         SHARED->C[i] = SHARED->A[i] + SHARED->B[i];
     }
+
+    SHARED->done0 = 1;
 
 
     /* wait worker */
@@ -148,17 +154,15 @@ int main(void)
     /* ========================================================
      * RESULTS AND SPEEDUP
      * ======================================================== */
-    if (parallel_cycles == 0) parallel_cycles = 1; // safety
+    if (parallel_cycles == 0) parallel_cycles = 1;
+    u32 speedup_x100 = (serial_cycles * 100) / parallel_cycles;
 
-    u64 speedup_x100 = (serial_cycles * 100) / parallel_cycles;
 
     xil_printf("\r\n=== TIMING SUMMARY ===\r\n");
-    xil_printf("Serial cycles   = %llu\r\n", (unsigned long long)serial_cycles);
-    xil_printf("Parallel cycles = %llu\r\n", (unsigned long long)parallel_cycles);
-    xil_printf("Speedup         = %llu.%02llu x\r\n",
-               (unsigned long long)(speedup_x100 / 100),
-               (unsigned long long)(speedup_x100 % 100));
-
+    xil_printf("Serial cycles   = %lu\r\n", (unsigned long)serial_cycles);
+    xil_printf("Parallel cycles = %lu\r\n", (unsigned long)parallel_cycles);
+    xil_printf("Speedup         = %lu.%02lu x\r\n",
+               speedup_x100 / 100, speedup_x100 % 100);
 
     /* ========================================================
      * RESULT VALIDATION
@@ -169,15 +173,8 @@ int main(void)
     for (i = 0; i < ARRAY_SIZE; ++i) {
         if (SHARED->C[i] != C_serial[i]) {
             errors++;
-            if (errors == 1) {
-                xil_printf("Mismatch at i=%d: C_par=%lu, C_ser=%lu\r\n",
-                           i,
-                           (unsigned long)SHARED->C[i],
-                           (unsigned long)C_serial[i]);
-            }
         }
     }
-
     xil_printf("Errors          = %d\r\n\n", errors);
 
     while (1) { }
