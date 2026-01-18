@@ -75,6 +75,7 @@ Lab4_ParallelProcessing/
 ├── worker.c                         → Core 1: second-half computation
 ├── shared.h                         → Shared DDR structure and flags
 ├── main.pdf                         → Experimental result Report
+├── lab4_results.txt                 → brief text file Experimental result 
 └── README.md                        → Lab documentation (this file)
 ```
 
