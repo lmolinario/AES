@@ -33,7 +33,7 @@
  * scalability and parallel speedup.
  * ============================================================ */
 #define ARRAY_SIZE 10   /* Default: functional test
-                         * Typical values: 1000, 10000 */
+                         * Typical values: 100, 1000, 10000 */
 
 /* ============================================================
  * SHARED MEMORY BASE ADDRESS

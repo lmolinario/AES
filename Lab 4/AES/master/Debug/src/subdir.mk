@@ -8,15 +8,18 @@ LD_SRCS += \
 
 C_SRCS += \
 ../src/master.c \
-../src/platform.c 
+../src/platform.c \
+../src/timer_ps.c 
 
 OBJS += \
 ./src/master.o \
-./src/platform.o 
+./src/platform.o \
+./src/timer_ps.o 
 
 C_DEPS += \
 ./src/master.d \
-./src/platform.d 
+./src/platform.d \
+./src/timer_ps.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes

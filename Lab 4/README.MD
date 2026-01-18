@@ -363,33 +363,34 @@ ARRAY_SIZE = 10000
 <p align="center">
   <img src="../img/lab4/lab4output.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
-<p align="center"><i>Output produced by both cores running in parallel (Master + Worker) from Lab Example </i></p>
+<p align="center"><i>UART output showing correct parallel execution on both cores (Master and Worker from Example Code). </i></p>
 
 
 ---
 <p align="center">
-  <img src="../img/lab4/lab4_10_5.png" alt="Conceptual functionality of convolution" width="650"/>
+  <img src="../img/lab4/lab4_10.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
-<p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
+<p align="center"><i>Output produced by both cores (Master + Worker): ARRAY_SIZE = 10</i></p>
 
 ---
 <p align="center">
-  <img src="../img/lab4/lab4_100_5.png" alt="Conceptual functionality of convolution" width="650"/>
+  <img src="../img/lab4/lab4_100.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
-<p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
+<p align="center"><i>Output produced by both cores (Master + Worker): ARRAY_SIZE = 100
+</i></p>
 
 ---
 <p align="center">
-  <img src="../img/lab4/lab4_1000_5.png" alt="Conceptual functionality of convolution" width="650"/>
+  <img src="../img/lab4/lab4_1000.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
-<p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
+<p align="center"><i>Output produced by both cores (Master + Worker): ARRAY_SIZE = 1000</i></p>
 
 ---
 
 <p align="center">
-  <img src="../img/lab4/lab4_10000_5.png" alt="Conceptual functionality of convolution" width="650"/>
+  <img src="../img/lab4/lab4_10000.png" alt="Conceptual functionality of convolution" width="650"/>
 </p>
-<p align="center"><i>Output produced by both cores running in parallel (Master + Worker)</i></p>
+<p align="center"><i>Output produced by both cores (Master + Worker): ARRAY_SIZE = 10000</i></p>
 
 ---
 

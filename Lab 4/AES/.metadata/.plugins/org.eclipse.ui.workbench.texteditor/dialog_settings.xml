@@ -2,20 +2,20 @@
 <section name="Workbench">
 	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
 		<item value="false" key="isRegEx"/>
-		<item value="vld1.32" key="selection"/>
+		<item value="u32 speedup_x100 = (serial_cycles * 100) / parallel_cycles;" key="selection"/>
 		<item value="false" key="casesensitive"/>
 		<item value="false" key="incremental"/>
 		<item value="true" key="wrap"/>
 		<item value="false" key="wholeword"/>
 		<list key="findhistory">
+			<item value="t_start = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER"/>
+			<item value="u32 speedup_x100 = (serial_cycles * 100) / parallel_cycles;"/>
 			<item value="vld1.32"/>
 			<item value="vld1.32   "/>
 			<item value="vec_add_serial"/>
 			<item value="float speedup = (float)serial_cycles / (float)parallel_cycles;"/>
 			<item value="                                                                                "/>
 			<item value="XPAR_AXI_FIFO_MM_S_0_BASEADDR"/>
-			<item value="global"/>
-			<item value="adi"/>
 		</list>
 		<list key="replacehistory">
 		</list>
@@ -24,7 +24,7 @@
 		<item value="385" key="DIALOG_WIDTH"/>
 		<item value="1|Segoe UI|9.0|0|WINDOWS|1|-18|0|0|0|400|0|0|0|1|0|0|0|0|Segoe UI" key="DIALOG_FONT_NAME"/>
 		<item value="523" key="DIALOG_HEIGHT"/>
-		<item value="1143" key="DIALOG_X_ORIGIN"/>
-		<item value="131" key="DIALOG_Y_ORIGIN"/>
+		<item value="1118" key="DIALOG_X_ORIGIN"/>
+		<item value="25" key="DIALOG_Y_ORIGIN"/>
 	</section>
 </section>

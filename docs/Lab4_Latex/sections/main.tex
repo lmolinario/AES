@@ -130,20 +130,32 @@ architecture and memory subsystem.
 
 Execution time measurements were performed using the ARM Cortex-A9 Global Timer
 and expressed in CPU cycles. Experiments were conducted for multiple array sizes
-(\texttt{ARRAY\_SIZE = 100}, \texttt{1000}, and \texttt{10000}) to evaluate the
-scalability of the proposed approach.
+(\texttt{ARRAY\_SIZE = 10}, \texttt{100}, \texttt{1000}, and \texttt{10000}) to assess
+the scalability of the proposed parallel approach.
 
-The experimental results show that parallel execution does not yield a significant
-speedup compared to the serial baseline. In some cases, the parallel implementation
-exhibits execution times comparable to or slightly higher than the serial version.
-This behavior is consistent across all tested array sizes.
+The obtained results, summarized in Table~\ref{tab:lab4_timing_results} and supported
+by the UART outputs reported in Figures~\ref{fig:lab4_10}--\ref{fig:lab4_10000},
+show that parallel execution does not provide a significant speedup with respect
+to the serial baseline. For all tested configurations, the parallel implementation
+exhibits execution times comparable to, or higher than, the serial version, resulting
+in a speedup consistently lower than one.
 
-From an architectural perspective, these results are expected and consistent with
-the state of the art. The vector addition kernel is strongly memory-bound, and both
-cores concurrently access the same shared DDR memory. As a consequence, memory
-bandwidth contention dominates execution time, limiting the benefits of task-level
-parallelism despite the even workload partitioning and minimal synchronization
-overhead.
+From an architectural perspective, this behavior is expected. The vector addition
+kernel is strongly memory-bound, and both cores concurrently access the same shared
+DDR memory. As a consequence, memory bandwidth contention dominates execution time,
+limiting the benefits of task-level parallelism despite the even workload partitioning
+and the minimal synchronization overhead.
+
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{images/lab4_10}
+    \caption{UART output for the parallel vector addition with \texttt{ARRAY\_SIZE = 10}.}
+    \label{fig:lab4_10}
+\end{figure}
+
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\linewidth]{images/lab4_100}
@@ -164,6 +176,65 @@ overhead.
     \caption{UART output for the parallel vector addition with \texttt{ARRAY\_SIZE = 10000}.}
     \label{fig:lab4_10000}
 \end{figure}
+
+
+\begin{table}[H]
+\centering
+\caption{Execution time comparison between serial and parallel implementations
+for different array sizes (Lab 4).}
+\label{tab:lab4_timing_results}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|c|r|r|c|}
+\hline
+\textbf{ARRAY\_SIZE} &
+\textbf{Serial cycles} &
+\textbf{Parallel cycles} &
+\textbf{Speedup} \\
+\hline
+10     & 276     & 384     & 0.71$\times$ \\
+100    & 2911    & 3368    & 0.86$\times$ \\
+1000   & 27644   & 32803   & 0.84$\times$ \\
+10000  & 325098  & 591334  & 0.54$\times$ \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\subsection*{Discussion in Light of Amdahl's Law}
+\addcontentsline{toc}{subsection}{Discussion in Light of Amdahl's Law}
+
+The experimental results obtained in Lab~4 can be formally interpreted using
+\textit{Amdahl's Law}, which provides an upper bound on the achievable speedup of a
+parallel program as a function of the fraction of code that can be parallelized.
+According to Amdahl's formulation, the theoretical speedup $S(N)$ obtained using
+$N$ processing units is given by:
+\[
+S(N) = \frac{1}{(1 - P) + \frac{P}{N}},
+\]
+where $P$ represents the fraction of the execution time that can be parallelized,
+and $(1 - P)$ corresponds to the inherently serial portion of the workload.
+
+In the implemented vector addition kernel, the computational loop is fully
+parallelizable in principle ($P \approx 1$). However, the experimental measurements
+show speedup values consistently lower than one (Table~\ref{tab:lab4_timing_results}),
+with measured speedups ranging from approximately $0.71\times$ for
+\texttt{ARRAY\_SIZE = 10} to $0.54\times$ for \texttt{ARRAY\_SIZE = 10000}.
+This indicates that the effective parallel fraction $P$ is significantly reduced
+by architectural constraints.
+
+In particular, although the arithmetic operations are parallelized across the two
+cores, both processors concurrently access the same shared DDR memory. As a result,
+memory access latency and bandwidth contention dominate execution time, effectively
+introducing a large serial component that limits scalability. In this context,
+the memory subsystem behaves as the true bottleneck of the system, reducing the
+benefits of task-level parallelism even when synchronization overhead is minimal.
+
+Therefore, the observed lack of speedup is not due to inefficient parallelization,
+but is a direct consequence of Amdahl's Law applied to a memory-bound workload on a
+shared-memory embedded architecture. This experimental evidence highlights the
+importance of considering memory hierarchy and bandwidth constraints when designing
+parallel applications for embedded multi-core systems.
+
 
 \subsection*{Assembly Inspection and SIMD Verification}
 \addcontentsline{toc}{subsection}{Assembly Inspection and SIMD Verification}
@@ -199,7 +270,7 @@ system limitations.
 Execution time measurements were performed using the ARM Cortex-A9 Global Timer
 to evaluate the impact of parallel execution and SIMD auto-vectorization on a
 vector addition workload. The following array sizes were considered:
-\texttt{ARRAY\_SIZE = 100}, \texttt{1000}, and \texttt{10000}.
+\texttt{ARRAY\_SIZE = 10}, \texttt{100},\texttt{1000}, and \texttt{10000}.
 
 For all tested configurations, the parallel implementation running on two cores
 does not provide a significant execution-time improvement compared to the serial
@@ -216,6 +287,12 @@ auto-vectorized by the compiler using ARM NEON SIMD instructions
 (\texttt{vld1.32}, \texttt{vadd.i32}, \texttt{vst1.32}). While SIMD reduces the
 number of executed instructions, the overall performance remains constrained by
 memory access latency rather than computational throughput.
+
+Although both parallel execution and SIMD auto-vectorization were correctly
+implemented and verified, the experimental results show no execution-time
+improvement for any of the tested array sizes
+(\texttt{ARRAY\_SIZE = 10, 100, 1000, 10000}),
+due to the memory-bound nature of the workload.
 
 \subsection*{Conclusions}
 \addcontentsline{toc}{subsection}{Conclusions}

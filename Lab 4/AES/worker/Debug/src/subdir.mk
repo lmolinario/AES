@@ -8,14 +8,17 @@ LD_SRCS += \
 
 C_SRCS += \
 ../src/platform.c \
+../src/timer_ps.c \
 ../src/worker.c 
 
 OBJS += \
 ./src/platform.o \
+./src/timer_ps.o \
 ./src/worker.o 
 
 C_DEPS += \
 ./src/platform.d \
+./src/timer_ps.d \
 ./src/worker.d 
 
 

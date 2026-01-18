@@ -18080,3 +18080,9 @@ con
 ----------------End of Script----------------
 
 18:59:09 INFO  : Launch script is exported to file 'C:\Users\Lello\Desktop\AES\Lab3\audio_lab_passthrough-main_2025\audio_lab_passthrough-main\audio_lab_z7\audio_lab\audio_lab.sdk\.sdk\launch_scripts\xilinx_c-c++_application_(system_debugger)\system_debugger_using_debug_lab3_step3_fir_timing.elf_on_local.tcl'
+19:28:27 INFO  : Disconnected from the channel tcfchan#9.
+10:08:11 INFO  : Registering command handlers for SDK TCF services
+10:08:12 INFO  : Launching XSCT server: xsct.bat -interactive C:\Users\Lello\Desktop\AES\Lab3\audio_lab_passthrough-main_2025\audio_lab_passthrough-main\audio_lab_z7\audio_lab\audio_lab.sdk\temp_xsdb_launch_script.tcl
+10:08:17 INFO  : XSCT server has started successfully.
+10:08:17 INFO  : Successfully done setting XSCT server connection channel  
+10:08:21 INFO  : Successfully done setting SDK workspace  
