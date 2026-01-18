@@ -128,6 +128,13 @@ where:
 UART output is performed **only after the measurement phase**, ensuring that serial I/O does not perturb the timing.
 
 ---
+**Note:**  
+The SCU (Private) Timer is used exclusively to generate functional delays
+during SSM2603 codec initialization, as required by the datasheet.
+All timing and performance measurements required by the lab are performed
+using the ARM Cortex-A9 Global Timer.
+
+---
 
 ### **Measured Output**
 
