@@ -444,6 +444,29 @@ These instructions confirm that the compiler successfully applied
 
 ---
 
+## Lab 4 – Experimental Results (Summary)
+
+The experimental evaluation of Lab 4 compares serial and parallel execution of a
+vector addition kernel on a dual-core ARM Cortex-A9 platform, as well as the impact
+of SIMD auto-vectorization using ARM NEON instructions.
+
+Execution time was measured using the ARM Global Timer for different array sizes:
+ARRAY_SIZE = 10, 100, 1000, and 10000.
+
+The parallel implementation, where Core 0 and Core 1 process half of the vector
+each, does not provide a significant execution-time improvement compared to the
+serial baseline. In some cases, parallel execution exhibits similar or slightly
+higher execution times.
+
+This behavior is explained by the memory-bound nature of the workload: both cores
+access the same shared DDR memory, leading to bandwidth contention that dominates
+execution time. Synchronization overhead is minimal and does not represent the main
+limiting factor.
+
+The serial baseline was successfully auto-vectorized by the compiler using ARM NEON
+SIMD instructions, as confirmed by assembly inspection. While SIMD reduces the number
+of executed instructions, it does not overcome the memory bandwidth limitation of
+the system.
 
 
 ## **Notes**

@@ -1,0 +1,11 @@
+Lab 4 – Parallel Processing and SIMD Evaluation: Experimental Results
+
+Execution time measurements were performed using the ARM Cortex-A9 Global Timer to evaluate the impact of task-level parallel execution and SIMD auto-vectorization on a vector addition workload. The following array sizes were considered: ARRAY_SIZE = 10, 100, 1000, and 10000.
+
+The experimental results show that parallel execution on two cores does not provide a significant execution-time improvement compared to the serial baseline. In some cases, the parallel implementation exhibits execution times comparable to or slightly higher than the serial version. This behavior is consistent across all tested array sizes.
+
+The limited performance gain is primarily due to the memory-bound nature of the workload. Both ARM Cortex-A9 cores concurrently access the same shared DDR memory, resulting in memory bandwidth contention that dominates execution time. Synchronization overhead between the two cores is minimal and does not represent the main performance bottleneck.
+
+SIMD auto-vectorization using ARM NEON instructions was successfully applied to the serial baseline, as confirmed by assembly inspection. The compiler-generated NEON vector instructions reduce the number of executed arithmetic instructions and improve instruction-level parallelism. However, SIMD optimization alone is not sufficient to overcome the memory bandwidth limitation of the shared-memory system.
+
+Overall, the results demonstrate that, for memory-bound workloads on embedded shared-memory architectures, neither task-level parallelism nor SIMD vectorization guarantees execution-time improvements. Memory hierarchy and bandwidth constraints play a dominant role in determining achievable performance.
