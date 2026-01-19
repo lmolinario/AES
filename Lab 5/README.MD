@@ -257,60 +257,6 @@ Repeat:
 
 ---
 
-## **Project Structure**
-
-
-
-```
-
-Lab 5/
-│
-├── AES/                                → Complete Xilinx SDK 2019.1 workspace
-│   ├── lab5_mnist/                     → SDK project: base MNIST DNN (Q8.8)
-│   ├── lab5_mnist_custom_TIPS/         → SDK project: custom Group 4 DNN with TIP1/TIP2
-│   ├── lab5_mnist_bsp/                 → BSP for base project
-│   ├── lab5_mnist_custom_TIPS_bsp/     → BSP for optimized custom project
-│   └── design_1_wrapper_hw_platform_0  → Exported Vivado hardware platform
-│
-├── lab5_mnist.c                        → Base MNIST inference (784→64→32→10, Q8.8)
-├── lab5_mnist_custom_TIPS.c            → Group 4 custom DNN
-│                                         (784→64→32→16→10,
-│                                          MODE_BASELINE / TIP1 / TIP1+TIP2)
-│
-├── group_4/                            → Group 4 resources:
-│                                         • ONNX model
-│                                         • binary weights / biases
-│                                         • reference test images
-│                                         • weights_group4.h → Group 4 weights (Q8.8 / Q1.7)
-│
-├── comparison_images/                  → Visual comparison and debugging material
-│                                         (original vs processed MNIST samples)
-│
-├── mnist_from_uart-main/               → Reference UART sender tools
-│                                         • weights.h → Base network weights (Q8.8)
-│                                         • test_images.h → Embedded reference MNIST images
-│                                         • Mnist images, Python scripts and examples
-│
-├── test/                               → Test images
-│                                         • Mnist images Q8.8 
-│                                         • Mnist images jpgs 
-│                                         • Mnist images Q0.8 
-│
-├── utils/                              → Offline preprocessing and verification tools:
-│   ├── bin2weights.py                  → Binary → C header conversion
-│   ├── images_test_bin.py              → Test image generation
-│   ├── tip1_q88_to_q08.py              → Q8.8 → Q0.8 image conversion (TIP1)
-│   └── verify_custom_dnn.py            → Python reference DNN verification
-│
-│
-├── timing_accuracy_results.txt         → Collected timing and accuracy results
-├── README.md                           → Lab documentation (this file)
-│
-├── lab5_results.txt                    → brief text file optimizations result 
-└── Lab 5 Report.pdf                    → Final optimizations report
-
-```
-
 
 
 ### **Step 8 – Custom Network with Optimization Tips (Q0.8 / Q1.7)**
@@ -367,6 +313,62 @@ This optimized version of the code:
 
 
 ---
+## **Project Structure**
+
+
+
+```
+
+Lab 5/
+│
+├── AES/                                → Complete Xilinx SDK 2019.1 workspace
+│   ├── lab5_mnist/                     → SDK project: base MNIST DNN (Q8.8)
+│   ├── lab5_mnist_custom_TIPS/         → SDK project: custom Group 4 DNN with TIP1/TIP2
+│   ├── lab5_mnist_bsp/                 → BSP for base project
+│   ├── lab5_mnist_custom_TIPS_bsp/     → BSP for optimized custom project
+│   └── design_1_wrapper_hw_platform_0  → Exported Vivado hardware platform
+│
+├── lab5_mnist.c                        → Base MNIST inference (784→64→32→10, Q8.8)
+├── lab5_mnist_custom_TIPS.c            → Group 4 custom DNN
+│                                         (784→64→32→16→10,
+│                                          MODE_BASELINE / TIP1 / TIP1+TIP2)
+│
+├── group_4/                            → Group 4 resources:
+│                                         • ONNX model
+│                                         • binary weights / biases
+│                                         • reference test images
+│                                         • weights_group4.h → Group 4 weights (Q8.8 / Q1.7)
+│
+├── comparison_images/                  → Visual comparison and debugging material
+│                                         (original vs processed MNIST samples)
+│
+├── mnist_from_uart-main/               → Reference UART sender tools
+│                                         • weights.h → Base network weights (Q8.8)
+│                                         • test_images.h → Embedded reference MNIST images
+│                                         • Mnist images, Python scripts and examples
+│
+├── test/                               → Test images
+│                                         • Mnist images Q8.8 
+│                                         • Mnist images jpgs 
+│                                         • Mnist images Q0.8 
+│
+├── utils/                              → Offline preprocessing and verification tools:
+│   ├── bin2weights.py                  → Binary → C header conversion
+│   ├── images_test_bin.py              → Test image generation
+│   ├── tip1_q88_to_q08.py              → Q8.8 → Q0.8 image conversion (TIP1)
+│   └── verify_custom_dnn.py            → Python reference DNN verification
+│
+│
+├── timing_accuracy_results.txt         → Collected timing and accuracy results
+├── README.md                           → Lab documentation (this file)
+│
+├── lab5_results.txt                    → brief text file optimizations result 
+└── Lab 5 Report.pdf                    → Final optimizations report
+
+```
+
+
+
 
 
 ## **Output Example**
