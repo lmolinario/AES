@@ -72,18 +72,21 @@ AES Labs/
 │   ├── master.c                  → Core 0: serial baseline, parallel execution, timing
 │   ├── worker.c                  → Core 1: second-half vector computation
 │   ├── shared.h                  → Shared DDR data structures and synchronization flags
-│   ├── main.pdf                  → Experimental results
+│   ├── Lab 4 Report.pdf          → Final experimental report
 │   ├── AES/                      → Full Xilinx SDK 2019.1 workspace
 │   └── README.md                 → Lab 4 documentation
 │
 ├── Lab 5/
-│   ├── main_XXXX.c
-│   ├── main_XXXX.c
-│   ├── main_XXXX.c
-│   ├── AES/                     → Full Xilinx SDK 2019.1 workspace
-│   └── README.md                → Lab 5 documentation
+│   ├── lab5_mnist.c                        → Base MNIST inference (784→64→32→10, Q8.8)
+│   ├── lab5_mnist_custom_TIPS.c            → Group 4 custom DNN
+│   │                                          784→64→32→16→10,
+│   │                                          MODE_BASELINE / TIP1 / TIP1+TIP2)
+│   ├── Lab 5 Report.pdf                    → Final experimental report
+│   │  
+│   ├── AES/                                → Full Xilinx SDK 2019.1 workspace
+│   └── README.md                           → Lab 5 documentation
 │
-└── README.md                    → Root documentation (this file)
+└── README.md                               → Root documentation (this file)
 ```
 
 
