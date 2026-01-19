@@ -131,6 +131,20 @@ application, including UART data reception, DNN inference, and result processing
 
 \chapter{DNN Architecture Analysis}
 
+\section{Laboratory Assignment Context}
+
+Laboratory~5 addresses the implementation and evaluation of a
+DNN-based microserver on the Zybo Z7 platform for handwritten digit
+recognition using the MNIST dataset.\footnote{\url{https://sites.google.com/view/lab-instructions-aes/home-page/lab5-dnn-on-mnist}}
+The assignment requires the analysis of a provided DNN model in ONNX
+format, the manual composition of the inference pipeline in C, and the
+integration of UART-based image streaming within a cyclic execution
+loop.
+Each iteration performs image reception, DNN inference, and result
+transmission, while execution time measurements are collected to
+quantify communication and computation overheads.
+
+
 \section{Baseline Network}
 
 The baseline DNN topology was analyzed by inspecting the corresponding ONNX model
@@ -523,7 +537,7 @@ maintaining full control over data transfer timing and synchronization.
 % ================= HOST =================
 \node[box, fill=blue!8] (host) {%
     \textbf{Host PC}\\
-    Python Client\\
+    UART Client\\
     (Image Streaming)
 };
 
@@ -1853,6 +1867,11 @@ The optimized configuration therefore yields a more balanced system design,
 in which communication latency is reduced and computational headroom is
 preserved, while fully satisfying real-time requirements and maintaining
 predictable execution characteristics under runtime operating conditions.
+
+These observations are consistent with the state of the art in fixed-point and
+quantized neural network inference, where reduced precision does not necessarily
+degrade classification outcomes for non-boundary inputs, while significantly
+improving system-level efficiency.
 
 
 
