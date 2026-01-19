@@ -1,7 +1,6 @@
 # **Lab 5 – Deep Neural Network Inference on MNIST (UART Microserver)**
 
-This repository contains the full implementation of **Lab 5** for the  
-**Advanced Embedded Systems** course (University of Cagliari).
+This repository contains the full implementation of **Lab 5** for the **Advanced Embedded Systems** course (University of Cagliari).
 
 The project focuses on the deployment of a **Deep Neural Network (DNN) inference
 pipeline** on an embedded platform, implemented entirely in software on the
@@ -10,6 +9,7 @@ pipeline** on an embedded platform, implemented entirely in software on the
 The application operates as a **UART-based microserver**, receiving MNIST images
 from a host PC, performing fixed-point inference, and returning the predicted
 digit, while measuring execution time using the **ARM Global Timer**.
+
 ---
 
 ## **Overview**
