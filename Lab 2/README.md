@@ -205,10 +205,10 @@ display out.ppm
 
 
 <p align="center">
-  <img src="img/lab2/input_128x128.png" alt="Original PPM image" width="220"/>
-  <img src="img/lab2/negative_output.png" alt="Negative image" width="220"/>
-  <img src="img/lab2/stretch_output.png" alt="Histogram stretching result" width="220"/>
-  <img src="img/lab2/equalized_output.png" alt="Histogram equalization result" width="220"/>
+  <img src="../img/lab2/input_128x128.png" alt="Original PPM image" width="220"/>
+  <img src="../img/lab2/negative_output.png" alt="Negative image" width="220"/>
+  <img src="../img/lab2/stretch_output.png" alt="Histogram stretching result" width="220"/>
+  <img src="../img/lab2/equalized_output.png" alt="Histogram equalization result" width="220"/>
 </p>
 
 <p align="center">
