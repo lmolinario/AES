@@ -287,11 +287,10 @@ Lab 5/
 ├── weights_group4.h                    → Group 4 weights (Q8.8 / Q1.7)
 ├── test_images.h                       → Embedded reference MNIST images
 │
-├── Tips and tricks for optimization.pdf → Instructor-provided optimization guidelines
 ├── results.txt                         → Collected timing and accuracy results
 ├── README.md                           → Lab documentation (this file)
 │
-└── main.pdf                             Final experimental report
+└── Lab 5 Report.pdf                    → Final experimental report
 
 ```
 

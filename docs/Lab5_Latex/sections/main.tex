@@ -335,9 +335,12 @@ validation and performance comparison.
 In addition to the baseline format, alternative fixed-point configurations are
 supported through compile-time selection.
 In particular, the optimized configuration (Tip~2) adopts a Q1.7 format for
-weights and biases, improving numerical stability and precision around zero, while preserving
-sign symmetry and compatibility with 16-bit arithmetic  while preserving
-sufficient fractional precision.
+weights and biases, reducing the fractional precision by one bit with respect to
+Q8.8 and applying offline saturation to a bounded domain.
+This represents a controlled quantization strategy aimed at improving numerical
+robustness and dynamic-range control while preserving sign symmetry and full
+compatibility with 16-bit arithmetic.
+
 The selected Q-format is controlled by the compile-time constant \texttt{QF},
 ensuring deterministic behavior and reproducible measurements across different
 runs.
@@ -404,6 +407,10 @@ aggressive scaling strategies.
 This design choice balances robustness and performance, preserving deterministic
 execution while maintaining extensibility for future architectural or numerical
 modifications.
+It is worth noting that the saturation to the signed 8-bit range discussed in
+the context of Tip~2 applies exclusively to offline preprocessing of network
+parameters, while all runtime computations operate on 16-bit fixed-point data
+with 64-bit accumulation.
 
 
 \section{Activation Functions}
@@ -1001,9 +1008,9 @@ network configurations.
 
 To improve numerical robustness, an alternative Q1.7 fixed-point representation
 was adopted for weights and biases (Tip~2).
-By allocating one additional bit to the integer part, this format increases the
-dynamic range available during accumulation, reducing the likelihood of
-saturation effects while preserving compatibility with 16-bit integer arithmetic.
+By adopting a Q1.7 format, the fractional length is reduced by one bit with respect
+to Q8.8, trading fractional precision for a different dynamic-range/quantization
+profile while remaining compatible with 16-bit integer arithmetic.
 
 The conversion from Q8.8 to Q1.7 is performed offline using a dedicated Python
 script that applies an arithmetic right shift and explicit saturation to the
@@ -1011,6 +1018,25 @@ target range.
 The resulting parameters are embedded directly into the application as static C
 macros, ensuring that no runtime conversion or additional computation is required
 on the embedded platform.
+
+Although weights and biases are stored in 16-bit signed variables in the embedded
+implementation, the Tip~2 optimization constrains their numerical domain
+\emph{offline} to the signed 8-bit range \([-128,127]\).
+This saturation is applied exclusively during offline preprocessing as part of
+the Q8.8 $\rightarrow$ Q1.7 conversion and does not reflect a limitation of the
+C data type used at runtime.
+
+The use of an \texttt{int16} container preserves full compatibility with the
+existing fixed-point multiply--accumulate pipeline and avoids any modification
+to the embedded inference code.
+The reduced numerical range therefore represents a deliberate quantization
+strategy applied at the parameter level, aimed at improving numerical robustness
+and controlling dynamic range, rather than a change in runtime data precision.
+
+No runtime saturation to 8-bit precision is performed on the embedded platform,
+in order to avoid additional conditional branches and preserve deterministic
+execution timing.
+
 
 The complete conversion procedure, including the Python script used to generate
 both baseline and optimized parameter sets, is documented in
@@ -1321,6 +1347,9 @@ This behavior is attributed to the interaction between input data inconsistencie
 However, when consistent binary input data is used across both embedded and
 Python golden models, functional equivalence is fully restored.
 
+
+
+
 \chapter{Performance Evaluation}
 
 
@@ -1485,12 +1514,12 @@ resulting in a substantial reduction of UART latency.
 This improvement directly translates into a shorter end-to-end iteration time,
 while preserving identical inference behavior.
 
-The Tip~1+Tip~2 configuration further reduces memory usage by adopting Q1.7
-weights and biases.
-However, as parameter transmission occurs only once at startup, this
-optimization does not significantly affect runtime latency.
-The observed performance gains in this configuration are therefore almost
-entirely attributable to the reduced UART input bandwidth introduced by Tip~1.
+The Tip~1+Tip~2 configuration changes only the internal parameter representation
+(weights and biases) and does not affect UART input bandwidth.
+Since parameter transmission occurs exclusively at startup, this optimization
+does not introduce any measurable impact on runtime latency.
+As a result, the observed end-to-end performance improvements remain almost
+entirely attributable to the reduced input data transmission enabled by Tip~1.
 
 Overall, the results clearly demonstrate that, for UART-based streaming
 applications, system performance is primarily constrained by communication
@@ -1674,60 +1703,197 @@ configurations such as the custom Group~4 topology.
 
 Experimental validation confirms that functional correctness is preserved under
 the optimized configuration.
-A limited number of misclassifications were observed during runtime execution
-with UART-streamed inputs, indicating a trade-off between reduced precision and
-classification robustness.
+The misclassifications observed during runtime execution with UART-streamed
+inputs are not attributable to reduced numerical precision, but rather to
+inconsistencies in the binary input data used during streaming.
+This conclusion is supported by the offline consistency analysis and the
+bit-accurate Python golden model discussed in Chapter~8.
 
 No instability or anomalous behavior was observed during extended execution,
 demonstrating that the alternative fixed-point representation is fully compatible
 with the implemented inference pipeline and does not compromise numerical
 stability.
 
+\subsection{Classification Behavior under Fixed-Point Optimizations}
+
+In addition to performance evaluation, the impact of the proposed fixed-point
+optimizations on classification behavior was analyzed.
+Although classification accuracy is not the primary focus of this chapter, a
+concise qualitative assessment is provided to highlight the trade-offs introduced
+by reduced-precision representations.
+
+Offline functional validation is always performed using statically embedded
+MNIST images encoded in Q8.8 format, independently of the selected fixed-point
+optimization mode.
+As a result, offline classification reflects exclusively the effect of the
+internal numerical representation of network parameters, rather than input
+encoding or communication-related optimizations.
+
+
+Under offline validation, the baseline configuration (Q8.8) and the Tip~1
+configuration (Q0.8 input with Q8.8 internal representation) exhibit comparable
+classification behavior.
+In both cases, the network correctly classifies the majority of test samples,
+with a limited number of misclassifications observed for specific digits
+(e.g., digit~5 misclassified as~3).
+These errors are consistent across both configurations and are therefore
+attributable to the trained network parameters rather than to the adopted
+fixed-point format.
+
+When the Tip~1+Tip~2 configuration is enabled, weights and biases are represented
+using the Q1.7 fixed-point format, reducing fractional precision while preserving
+sign information.
+Under this configuration, a higher number of misclassifications is observed
+during offline functional validation (e.g., digits~0,~3, and~8 misclassified as~5).
+This behavior reflects the reduced numerical precision available during
+accumulation and activation stages, which affects the robustness of the
+classification outcome for borderline inputs.
+
+Runtime classification behavior reflects the actual operating conditions of the
+UART-based DNN microserver and may reproduce input-dependent anomalies when
+inconsistent binary samples are used, as discussed in Chapter~8.
+
+When images are streamed via UART, classification results reflect the behavior
+observed during embedded execution.
+
+Runtime classification reflects the UART-streamed inputs and may reproduce the
+digit-5 anomaly when the inconsistent binary sample is used; this behavior is
+addressed and explained in Chapter~8.
+
+
+Importantly, the observed variations in classification behavior do not affect
+runtime performance.
+Experimental measurements confirm that inference execution time remains
+deterministic and invariant across all fixed-point configurations.
+The impact of Tip~2 is therefore confined to numerical robustness and
+classification accuracy under offline validation, without introducing any
+additional computational or communication overhead.
+
+Overall, these results highlight a clear trade-off between numerical precision and
+classification robustness, while confirming that the proposed optimizations
+preserve deterministic timing behavior and real-time capability of the embedded
+DNN inference system, as summarized in Table~\ref{tab:classification_vs_tips}.
+
+
+\begin{table}[H]
+\centering
+\caption{Classification accuracy under different fixed-point configurations.
+Offline validation is always performed on Q8.8 embedded images, while runtime
+accuracy refers to UART-streamed inputs (digits 0--9).}
+\label{tab:classification_vs_tips}
+\renewcommand{\arraystretch}{1.25}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|l|l|c|c|c|}
+\hline
+\textbf{Configuration} & \textbf{Evaluation Mode} & \textbf{Correct} & \textbf{Incorrect} & \textbf{Accuracy [\%]} \\
+\hline
+Baseline (Q8.8) &
+Offline (Q8.8 embedded images) &
+9 / 10 & 1 / 10 & 90\% \\
+\hline
+Baseline (Q8.8) &
+Runtime (UART Q8.8 streaming) &
+9 / 10 & 1 / 10 & 90\% \\
+\hline
+Tip~1 (Q0.8 input, Q8.8 int.) &
+Offline (Q8.8 embedded images) &
+9 / 10 & 1 / 10 & 90\% \\
+\hline
+Tip~1 (Q0.8 input, Q8.8 int.) &
+Runtime (UART Q0.8 streaming) &
+9 / 10 & 1 / 10 & 90\% \\
+\hline
+Tip~1 + Tip~2 (Q0.8 + Q1.7) &
+Offline (Q8.8 embedded images) &
+7 / 10 & 3 / 10 & 70\% \\
+\hline
+Tip~1 + Tip~2 (Q0.8 + Q1.7) &
+Runtime (UART Q0.8 streaming) &
+10 / 10 & 0 / 10 & 100\% \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+Runtime classification reflects the UART-streamed inputs and may reproduce
+input-dependent anomalies when inconsistent binary samples are used; this
+behavior is analyzed and explained in Chapter~8.
+
+
+The reduced classification accuracy observed during offline validation under
+Tip~1+Tip~2 is a direct consequence of the lower fractional precision adopted for
+weights and biases (Q1.7).
+While input images are always provided in Q8.8 format during offline testing,
+the quantization of network parameters introduces small numerical errors in the
+multiply--accumulate operations, which may affect the classification of
+borderline samples.
+This behavior represents a controlled precision--robustness trade-off and does
+not impact runtime accuracy or deterministic execution behavior.
+
+
+
 \subsection{Discussion on Optimized Configuration}
 
 The performance evaluation with optimization tips enabled highlights a key
 system-level insight.
-While computational performance remains essentially unchanged, communication
-efficiency and numerical robustness are significantly improved.
+While computational performance remains essentially unchanged across all
+configurations, communication efficiency is significantly improved through
+compact input data representation, and numerical behavior is affected in a
+controlled and predictable manner by reduced-precision parameter encoding.
 
-These results confirm that, in embedded DNN microserver applications, effective
-optimization strategies often target data representation and communication
-mechanisms rather than raw computational acceleration.
-The optimized configuration therefore yields a more balanced and robust system
-design, while fully satisfying real-time requirements and preserving deterministic
-execution behavior.
+These results confirm that, in embedded DNN microserver applications,
+effective optimization strategies primarily target data representation and
+communication mechanisms rather than raw computational acceleration.
+In particular, Tip~1 directly addresses the dominant system bottleneck by
+reducing UART bandwidth requirements, while Tip~2 introduces a deliberate
+precision--robustness trade-off at the numerical level without impacting
+execution time or deterministic behavior.
+
+The optimized configuration therefore yields a more balanced system design,
+in which communication latency is reduced and computational headroom is
+preserved, while fully satisfying real-time requirements and maintaining
+predictable execution characteristics under runtime operating conditions.
+
 
 
 \section{Overall Discussion}
 
-The performance evaluation presented in this chapter highlights a clear separation
-between computation and communication costs in the proposed DNN microserver.
-In both the baseline and optimized configurations, the inference pipeline exhibits
-deterministic execution times on the order of a few milliseconds per image,
-confirming the suitability of the fixed-point software-based implementation for
-real-time operation on an embedded ARM Cortex-A9 processor.
+The performance evaluation presented in this chapter highlights a clear
+separation between computation and communication costs in the proposed DNN
+microserver.
+In both the baseline and optimized configurations, the inference pipeline
+exhibits deterministic execution times on the order of a few milliseconds per
+image, confirming the suitability of a fixed-point, software-only
+implementation for real-time operation on an embedded ARM Cortex-A9 processor.
 
 The baseline analysis demonstrates that computation is not the limiting factor,
-as inference time is orders of magnitude smaller than UART communication latency.
+as inference time is orders of magnitude smaller than UART communication
+latency.
 This observation is further reinforced by the optimized configuration, in which
 communication-oriented enhancements significantly reduce input reception time
 without affecting computational performance.
 
-The comparison between baseline and optimized results confirms that system-level
-optimizations targeting data representation and communication bandwidth are more
-effective than purely computational optimizations in this context.
-At the same time, the adoption of alternative fixed-point formats improves numerical
-robustness, particularly for deeper network topologies, without compromising timing
-predictability or functional correctness.
+The comparison between baseline and optimized results confirms that
+system-level optimizations targeting data representation and communication
+bandwidth are more effective than purely computational optimizations in this
+context.
+At the same time, the adoption of alternative fixed-point formats for network
+parameters affects numerical robustness and offline classification behavior,
+while preserving deterministic timing and full functional correctness under
+runtime operating conditions.
 
-Overall, the obtained results validate the design choices adopted in this work and
-demonstrate that careful software design, combined with measurement-driven analysis,
-enables efficient and scalable deployment of Deep Neural Network inference on
-resource-constrained embedded platforms.
-To summarize the key findings of the performance evaluation and their implications
-from a system design perspective, Table~\ref{tab:design_implications} reports a
-compact mapping between experimental observations and the corresponding design
-choices and conclusions.
+Overall, the obtained results validate the design choices adopted in this work
+and demonstrate that careful software design, combined with
+measurement-driven analysis, enables efficient and scalable deployment of Deep
+Neural Network inference on resource-constrained embedded platforms.
+To summarize the key findings of the performance evaluation and their
+implications from a system design perspective,
+Table~\ref{tab:design_implications} reports a compact mapping between
+experimental observations and the corresponding design choices and conclusions.
+
+
+
+
 \begin{table}[H]
 \centering
 \caption{Summary of performance results and corresponding design implications}
@@ -1753,9 +1919,11 @@ Compact input representation reduces latency &
 Q0.8 input streaming reduces UART reception time by $\approx 31\%$ &
 Communication-oriented optimizations yield significant system-level performance gains \\
 \hline
-Reduced-precision parameters preserve correctness &
-Q1.7 weights and biases do not affect inference time or classification behavior &
-Alternative fixed-point formats can improve numerical robustness without compromising timing predictability \\
+Reduced-precision parameters preserve runtime correctness &
+Q1.7 weights and biases do not affect inference time and preserve correct
+runtime classification behavior &
+Alternative fixed-point formats enable memory and numerical trade-offs without
+compromising deterministic timing or real-time operation \\
 \hline
 Optimizations preserve real-time capability &
 Inference always completes within the inter-arrival time of input samples &
@@ -1763,7 +1931,6 @@ System satisfies real-time requirements with significant timing margins \\
 \hline
 \end{tabular}
 \end{table}
-
 
 \chapter{Conclusions}
 
@@ -1783,8 +1950,8 @@ high-level AI frameworks but become critical in resource-constrained embedded
 environments.
 
 The adoption of fixed-point arithmetic enabled the complete elimination of
-floating-point operations, ensuring deterministic execution behavior and predictable
-timing characteristics.
+floating-point operations, ensuring deterministic execution behavior and
+predictable timing characteristics.
 This design choice proved particularly effective in a standalone execution model,
 where low-level control and timing repeatability are essential for accurate
 performance characterization and real-time validation.
@@ -1798,9 +1965,6 @@ As a consequence, the system operates in a communication-bound regime, while the
 inference pipeline itself fully satisfies real-time execution requirements with
 large timing margins.
 
-
-
-
 Cycle-accurate measurements obtained using the ARM Global Timer provided detailed
 insight into the contribution of each processing stage.
 Per-layer profiling confirmed that the first fully connected layer dominates the
@@ -1808,9 +1972,12 @@ computational workload, in line with theoretical expectations for dense neural
 networks, and validated the effectiveness of the adopted measurement methodology.
 
 Additional system-level optimizations, including compact input data representation
-and alternative fixed-point formats for network parameters, further improved
-communication efficiency and numerical robustness without modifying the core
-inference algorithm.
+for UART streaming and alternative fixed-point formats for network parameters,
+significantly improved communication efficiency and enabled controlled numerical
+trade-offs.
+In particular, reduced-precision parameter encoding affects numerical robustness
+under offline validation, while preserving deterministic execution and full
+functional correctness under runtime operating conditions.
 The successful extension of the implementation to a custom Group~4 network topology
 demonstrated the scalability, modularity, and reusability of the proposed software
 framework.
@@ -1823,6 +1990,7 @@ The presented results highlight the importance of system-level analysis when
 integrating AI workloads into embedded platforms and provide a solid foundation
 for future investigations on hardware--software co-design and performance-aware
 AI deployment in resource-constrained systems.
+
 
 \chapter{Appendix – Preprocessing Tools and Optimization Scripts}
 \label{chap:appendix}
@@ -1839,10 +2007,9 @@ and (iii) validate the correctness and consistency of the experimental setup.
 
 All tools are designed to be deterministic, reproducible, and directly traceable
 to the corresponding optimizations discussed in the main body of the report.
-
 \begin{table}[H]
 \centering
-\caption{Offline preprocessing and validation tools used in Laboratory~5}
+\caption{Offline preprocessing, validation, and verification tools used in Laboratory~5}
 \label{tab:appendix_tools}
 \renewcommand{\arraystretch}{1.2}
 \begin{tabular}{|l|c|p{7cm}|}
@@ -1851,18 +2018,26 @@ to the corresponding optimizations discussed in the main body of the report.
 \hline
 \texttt{bin2weights.py} &
 Tip~2 &
-Conversion of DNN weights and biases from Q8.8 to Q1.7 fixed-point format for
-memory footprint reduction and improved numerical robustness. \\
+Conversion of DNN weights and biases from Q8.8 to Q1.7 fixed-point format to reduce
+memory footprint and enable controlled numerical trade-offs. \\
 \hline
 \texttt{tip1\_q88\_to\_q08.py} &
 Tip~1 &
-Compression of MNIST input images from Q8.8 to Q0.8 to reduce UART bandwidth
-by approximately 50\%. \\
+Compression of MNIST input images from Q8.8 to Q0.8 representation, reducing UART
+bandwidth requirements by approximately 50\%. \\
 \hline
 \texttt{images\_test\_bin.py} &
 Validation &
-Offline consistency check between embedded MNIST images and binary images used
-for UART-based inference, ensuring numerical equivalence and correct preprocessing. \\
+Offline consistency check between statically embedded MNIST images and binary
+images used for UART-based inference, ensuring numerical equivalence and correct
+preprocessing. \\
+\hline
+\texttt{verify\_custom\_dnn.py} &
+Validation &
+Bit-accurate Python reference implementation of the custom Group~4 DNN, used as
+a golden model to verify weights, biases, fixed-point arithmetic, layer ordering,
+activation behavior, and final classification results against the embedded C
+implementation. \\
 \hline
 \end{tabular}
 \end{table}
@@ -2810,7 +2985,7 @@ Waiting for image...
 
 \end{lstlisting}
 
-The complete \texttt{results.txt} file contains repeated iterations for all test
+The complete \texttt{results.txt} file eachable at Github repository)\footnote{\url{https://github.com/lmolinario/AES}}. contains repeated iterations for all test
 images and configurations and was used to compute the average timing values
 reported in Chapter~9.
 The log also supports the validation and debugging analysis discussed in
@@ -2818,13 +2993,3 @@ Chapter~8 by providing direct evidence of systematic misclassification and its
 resolution under controlled input conditions.
 
 
-\section{Reproducibility Notes}
-\label{sec:appendix_reproducibility}
-All Python scripts reported in this appendix were executed using standard scientific
-Python libraries and do not rely on platform-specific dependencies.
-The generated fixed-point parameters and input data are directly compatible with
-the embedded C implementation provided in the laboratory code.
-
-Together with the commented C source files, these tools enable full reproducibility
-of the experimental results and support transparent evaluation of the proposed
-optimization techniques.
