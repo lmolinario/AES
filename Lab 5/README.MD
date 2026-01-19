@@ -370,18 +370,6 @@ This optimized version of the code:
 * does not modify the FC function or the DNN computational logic
 
 
-## **Observed Performance Results (Summary)**
-
-Experimental results show that end-to-end system performance is dominated by UART communication rather than by DNN computation.
-
-Key observations:
-
-- UART reception accounts for more than **99% of the total iteration time** in the baseline configuration.
-- Fixed-point DNN inference executes in approximately **3 ms per image**, corresponding to a compute-only throughput of about **330 images/s**.
-- **TIP 1** (Q0.8 input images) significantly reduces UART reception time by reducing the transmitted payload.
-- **TIP 2** does not affect runtime latency; its impact is limited to numerical representation and robustness.
-
-
 ---
 
 
