@@ -239,17 +239,17 @@ This folder contains:
 
 * a new ONNX model
 <p align="center">
-  <img src="../img/lab5/onnx_model_group_4.png" alt="Onnx Model Group 4" width="120"/>
+  <img src="../img/lab5/onnx_model_group_4.png" alt="Onnx Model Group 4" width="180"/>
 </p>
 
 * new weights and biases
 <p align="center">
-  <img src="../img/lab5/weights_G_4.png" alt="Onnx Model Group 4" width="360"/>
+  <img src="../img/lab5/weights_G_4.png" alt="Onnx Model Group 4" width="480"/>
 </p>
 
 * new test images
 <p align="center">
-  <img src="../img/lab5/test_image.png" alt="Onnx Model Group 4" width="360"/>
+  <img src="../img/lab5/test_image.png" alt="Onnx Model Group 4" width="480"/>
 </p>
 
 Repeat:
