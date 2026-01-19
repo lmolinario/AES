@@ -292,7 +292,7 @@ Lab 5/
 ├── mnist_from_uart-main/               → Reference UART sender tools
 │                                         (Python scripts and examples)
 │
-├── test/                               → Images to testing 
+├── test/                               → Test images
 │
 ├── utils/                              → Offline preprocessing and verification tools:
 │   ├── bin2weights.py                  → Binary → C header conversion
@@ -333,12 +333,13 @@ buffer[i] = ((short)px) << 8;   // Q0.8 → Q8.8
 ````
 
 **Result:**  
-Image transmission size is reduced from 1568 B to 784 B (≈ 2× faster).
+Image transmission size is reduced from 1568 B to 784 B (≈ 2× faster), significantly reducing UART reception time.
 
 
 ---
 
-### 🔹 TIP 2 — Weight Optimizations  (Q1.7 → Q8.8)
+### 🔹 TIP 2 — Weight Optimization (Q1.7 → Q8.8)
+
 
 Weight analysis shows that the most significant byte is always `0x00` or `0xFF`, since the integer part only represents the sign.
 
@@ -349,12 +350,14 @@ buffer[i] = ((short)w) << 1;   // Q1.7 → Q8.8
 ```
 
 **Result:**  
-Image transmission size is reduced from 1568 B to 784 B (≈ 2× faster).
+A 50% reduction in the size of weights transmitted at system startup, with no impact on runtime inference latency.
+
 
 
 ---
 
-### 🔹 Tips goal
+### 🔹 Optimization Goals
+
 
 This optimized version of the code:
 
