@@ -32,9 +32,14 @@ From an architectural perspective, the proposed implementation explicitly follow
 a reduced instruction set execution model, where computation is expressed through
 regular load--compute--store patterns and deterministic control flow.
 Although the target processor is an ARM Cortex-A9, the adopted execution model
-closely reflects the RISC/MIPS principles introduced in the Advanced Embedded
-Systems course, particularly in terms of instruction simplicity, predictable
-memory access, and stable execution timing.
+is intentionally structured according to a \emph{RISC-style programming paradigm},
+as introduced in the Advanced Embedded Systems course.
+In particular, the implementation emphasizes explicit load--compute--store
+sequences, simple arithmetic instructions, regular loop structures, and predictable
+control flow.
+References to MIPS are therefore conceptual and pedagogical, rather than
+architectural, and are used to highlight instruction-level regularity and timing
+predictability rather than ISA-specific features.
 
 
 The implemented DNN processes grayscale images of size $28 \times 28$ pixels and
@@ -72,7 +77,7 @@ The Zynq-7000 architecture integrates a dual-core ARM processing system with
 programmable logic on the same device, enabling a wide range of hardware--software
 co-design solutions.
 
-In this work, the entire Deep Neural Network inference pipeline is executed
+The entire Deep Neural Network inference pipeline is executed
 exclusively on the ARM Cortex-A9 processor, without exploiting the programmable
 logic or any dedicated hardware accelerator.
 This design choice is deliberate and aligns with the objectives of the laboratory,
@@ -114,7 +119,7 @@ computation time, which is essential for meaningful performance analysis.
     \label{fig:realterm}
 \end{figure}
 
-All timing measurements presented in this work are obtained using the 64-bit ARM
+All timing measurements  are obtained using the 64-bit ARM
 Global Timer available in the Processing System.
 Execution times are measured through the \texttt{XTime\_GetTime()} API, which
 provides a hardware-based, free-running timing source independent of software
@@ -122,12 +127,7 @@ overhead.
 This approach enables microsecond-level profiling of individual stages of the
 application, including UART data reception, DNN inference, and result processing.
 
-Overall, the selected platform and development environment provide a controlled and
-reproducible context for studying the deployment of Deep Neural Networks on
-embedded ARM-based systems.
-The combination of standalone execution, serial communication, and hardware-based
-timing allows a clear evaluation of software efficiency, determinism, and
-measurement-driven optimization strategies.
+
 
 \chapter{DNN Architecture Analysis}
 
@@ -184,7 +184,7 @@ Netron.
 
 The simplicity of the baseline network allows a direct one-to-one mapping between
 the graphical representation provided by Netron and the corresponding C
-implementation.
+implementation (reachable at Github repository)\footnote{\url{https://github.com/lmolinario/AES}}.
 Each fully connected layer is explicitly implemented as a pair of nested loops
 performing multiply--accumulate operations, while activation functions are
 implemented as separate processing stages.
@@ -240,14 +240,7 @@ using Netron.
     \label{fig:onnx_group4}
 \end{figure}
 
-The comparison between the baseline and the custom network provides a meaningful
-case study for evaluating the scalability of the proposed software framework.
-By increasing network depth while preserving the same implementation structure,
-it is possible to analyze how architectural changes affect execution time,
-memory usage, and real-time capability on the embedded platform.
-Importantly, this scalability is achieved without requiring substantial
-modifications to the overall software design, confirming the modularity and
-extensibility of the implemented DNN inference pipeline.
+
 
 \chapter{Fixed-Point DNN Implementation}
 
@@ -342,7 +335,8 @@ validation and performance comparison.
 In addition to the baseline format, alternative fixed-point configurations are
 supported through compile-time selection.
 In particular, the optimized configuration (Tip~2) adopts a Q1.7 format for
-weights and biases, increasing the available dynamic range while preserving
+weights and biases, improving numerical stability and precision around zero, while preserving
+sign symmetry and compatibility with 16-bit arithmetic  while preserving
 sufficient fractional precision.
 The selected Q-format is controlled by the compile-time constant \texttt{QF},
 ensuring deterministic behavior and reproducible measurements across different
@@ -485,7 +479,7 @@ The microserver is responsible for receiving input data from an external host,
 executing the neural network inference, and returning the classification result
 to the host system.
 
-An overview of the adopted UART-based microserver architecture is shown in
+An example overview of the adopted UART-based microserver architecture is shown in
 Figure~\ref{fig:uart_microserver_arch}.
 The system follows a request--response microserver model, where the host
 explicitly triggers inference by transmitting input samples, and the embedded
@@ -635,6 +629,18 @@ described in Appendix~\ref{sec:appendix_tip1}.
 The selection between baseline and optimized input streaming modes is performed
 at compile time, guaranteeing deterministic behavior and enabling fair
 performance comparison.
+
+In the current implementation, Q0.8 input samples are directly used as
+integer values and interpreted consistently within the fixed-point
+arithmetic framework.
+In the combined optimized configuration (Tip~1 + Tip~2), input samples transmitted
+in Q0.8 format are explicitly realigned to the internal Q1.7 representation by
+means of a deterministic right-shift operation.
+This scaling ensures numerical consistency between input data and network
+parameters when the internal fractional length is reduced.
+The applied alignment does not introduce additional runtime overhead and preserves
+deterministic execution behavior.
+
 
 \section{Blocking Reception and Deterministic Behavior}
 
@@ -799,24 +805,13 @@ software jitter, or peripheral interrupts.
 
 \section{Warm-Up and Steady-State Measurements}
 
-To ensure that the reported measurements reflect steady-state execution behavior,
-the first iteration of the inference loop is intentionally discarded.
-This warm-up iteration allows instruction caches, data caches, and branch
-predictors to reach a stable state, avoiding artificially inflated timing results
-caused by cold-start effects.
-A single warm-up iteration is sufficient in this context, as the execution flow,
-memory access patterns, and control paths remain invariant across subsequent
-iterations.
+In the current implementation, no explicit warm-up iteration is discarded.
+This choice is justified by the highly regular execution flow of the inference
+loop and the absence of dynamic memory allocation, OS activity, or data-dependent
+branches.
+As a result, measured execution times exhibit negligible variance already from
+the first iteration.
 
-All subsequent measurements are therefore representative of the deterministic
-execution conditions encountered during continuous real-time operation of the
-DNN microserver.
-
-This approach is consistent with the methodology adopted in previous laboratories
-and ensures fair comparison between baseline and optimized configurations.
-By excluding the warm-up iteration, the collected measurements accurately
-characterize steady-state performance and support reproducible, cycle-accurate
-profiling of the inference pipeline.
 
 
 \section{Separation of Communication and Computation}
@@ -867,37 +862,23 @@ framework.
 
 \section{Per-Layer Profiling}
 
-Each stage of the inference pipeline is profiled independently using the ARM
-Global Timer.
-In particular, execution time is measured for each fully connected layer and
-for the associated activation functions.
-At implementation level, this is achieved by placing dedicated timing windows
-around each fully connected layer and its corresponding activation stage.
+Although the execution time of the complete DNN inference pipeline is measured
+as a single block, the contribution of individual layers is inferred analytically
+rather than instrumented explicitly.
+Given the regular structure of fully connected layers and the known number of
+MAC operations per layer, the computational dominance of the first layer
+(784 → 64) can be derived directly from its MAC count.
 
-This per-layer profiling approach allows precise identification of the most
-computationally intensive stages of the network and provides direct insight into
-how network depth and layer dimensions affect overall performance.
-This analysis is particularly relevant when comparing the baseline network with
-the deeper custom topology adopted by Group~4.
 
-By instrumenting the code at multiple points, it is possible to isolate the cost
-of individual layers rather than relying on a single aggregate measurement.
+Although a softmax normalization is computed during result processing,
+the final classification decision is obtained exclusively through an
+\texttt{argmax} operation on the raw output logits.
+The softmax values are therefore not used for decision making and do not
+affect either accuracy or execution time.
 
-Experimental results clearly show that the fully connected layers dominate the
-computational cost of inference.
-This behavior is expected for dense neural networks, where the bulk of the
-execution time is spent performing multiply--accumulate operations.
-In contrast, activation functions such as ReLU contribute only a negligible
-fraction of the total inference time, due to their simple comparison-based
-implementation.
 
-Although the laboratory template includes a softmax computation during the result
-processing stage, the final classification decision is effectively determined by
-an argmax operation on the output logits.
-As a consequence, the softmax computation does not influence the predicted class
-and is not performance-critical in the current implementation.
-For this reason, its impact on overall execution time is negligible compared to
-that of the fully connected layers.
+
+
 
 Figure~\ref{fig:timing} shows a representative execution time breakdown obtained
 during real-time inference, highlighting the relative contribution of each
@@ -922,7 +903,8 @@ Experimental measurements show that the time required to receive a complete MNIS
 image via UART is orders of magnitude larger than the time required to execute the
 DNN inference itself.
 While inference requires only a few milliseconds per image, UART-based reception
-may require several seconds, depending on transmission parameters and host-side
+may require on the order of several million microseconds (i.e., several seconds)
+, depending on transmission parameters and host-side
 behavior.
 
 This result demonstrates that, under the considered configuration, the system is
@@ -1159,11 +1141,21 @@ data preprocessing and transmission stages involved in UART-based input streamin
 
 The misclassification of the digit ``5'' is directly observable at runtime through
 the serial output produced by the embedded system.
-Figure~\ref{fig:digit5_baseline_arrow} and Figure~\ref{fig:digit5_custom_arrow}shows that the same incorrect
+Figure~\ref{fig:digit5_baseline_arrow} and Figure~\ref{fig:digit5_custom_arrow} shows that the same incorrect
 classification occurs in both the baseline and custom network configurations,
 providing strong evidence that the anomaly is not related to the DNN architecture
 or fixed-point arithmetic, but rather to inconsistencies in the input data used
 during UART-based inference.
+
+\paragraph{Baseline Reference for Offline Validation}
+It is important to note that the offline functional validation using statically
+embedded MNIST images is intentionally performed using the baseline Q8.8 fixed-point
+configuration.
+This choice ensures that functional correctness is evaluated independently of
+runtime optimization modes and fixed-point parameter variations.
+Optimized configurations (Tip~1 and Tip~2) are therefore assessed exclusively
+during runtime execution using UART-streamed inputs.
+
 
 \section{Hypothesis and Debugging Strategy}
 
@@ -1315,14 +1307,23 @@ pipelines.
 Only by enforcing such comprehensive validation procedures can experimental
 results be considered reliable, reproducible, and scientifically sound.
 
+It is important to note that the observed misclassification behavior is not
+attributable to the reduced-precision Q1.7 parameter configuration.
+Offline functional validation is intentionally performed using the baseline
+Q8.8 fixed-point format, and optimized configurations are evaluated exclusively
+during runtime execution with consistent input data.
+When consistent binary inputs are used across both embedded execution and the
+Python golden model, functional equivalence is fully preserved.
+
+
+This behavior is attributed to the interaction between input data inconsistencies and the activation sensitivity of early layers. Reduced fractional precision does not represent the root cause and only amplifies input-dependent effects when inconsistent data is used.
+
+However, when consistent binary input data is used across both embedded and
+Python golden models, functional equivalence is fully restored.
+
 \chapter{Performance Evaluation}
 
-This chapter presents a quantitative performance evaluation of the proposed
-UART-based DNN microserver, with a specific focus on execution time, communication
-latency, and overall end-to-end performance.
-All measurements are conducted on the Zybo Z7 platform using the methodology
-described in Chapter~6 and rely on cycle-accurate timing obtained through the
-ARM Cortex-A9 Global Timer.
+
 
 Performance is evaluated under three fixed-point configurations:
 (i) a baseline configuration using Q8.8 fixed-point representation for both input
@@ -1337,8 +1338,13 @@ components: UART input reception time, DNN inference execution time, and output
 printing overhead.
 This decomposition enables a precise identification of performance bottlenecks
 and a clear assessment of the effectiveness of the proposed optimizations.
-All reported results refer to steady-state execution conditions, with initial
-warm-up iterations discarded, as discussed in Chapter~6.
+
+ All reported results refer to steady-state execution conditions.
+Given the standalone and fully deterministic execution model, no explicit
+warm-up iterations were discarded, as execution time measurements exhibit
+negligible variance already from the first iteration, as discussed in
+Chapter~6.
+
 
 \begin{table}[H]
 \centering
@@ -1358,6 +1364,24 @@ Tip~1 + Tip~2 (Q1.7)   & 3\,690\,949 & 2\,988 & 18 & 3\,693\,955 \\
 
 Table~\ref{tab:perf_summary} reports the average execution time breakdown measured
 under the considered fixed-point configurations.
+
+Minor differences observed between Tip~1 and Tip~1+Tip~2 average UART reception
+times are attributed to host-side transmission variability and UART scheduling
+effects, rather than to the fixed-point configuration itself.
+As expected, Tip~2 does not influence communication latency, since it affects
+only internal parameter representation.
+
+
+Offline functional validation results are not reported in this chapter, as all
+performance measurements refer exclusively to runtime execution under the selected
+fixed-point configuration.
+In particular, all timing results reported in this chapter are computed exclusively
+from images transmitted via UART during runtime execution, corresponding to a fixed
+and reproducible input sequence of digits from 0 to 9.
+
+Baseline Q8.8 validation is used solely as a correctness reference and does not
+affect the reported timing results.
+
 
 The numerical values reported in Table~\ref{tab:perf_summary} are obtained by
 averaging multiple iterations of the real-time inference loop executed on the
@@ -1395,6 +1419,86 @@ number of multiply--accumulate operations remain unchanged.
 The observed performance impact of Tip~2 is therefore limited to numerical
 robustness, rather than execution speed, and will be discussed further in the
 context of accuracy and stability considerations.
+
+
+\section{Experimental Setup and UART-Based Input Methodology}
+
+Performance evaluation was conducted exclusively under runtime conditions using
+MNIST images transmitted to the embedded platform via UART.
+Unlike the offline functional validation, which relies on statically embedded
+reference images, all measurements reported in this chapter are based on
+images streamed from the host PC to the Zybo Z7 board.
+
+Each experiment consists of a controlled sequence of ten MNIST images,
+corresponding to digits from 0 to 9, transmitted sequentially without resetting
+the board.
+This approach ensures full reproducibility of the measurements and allows
+a direct comparison between different fixed-point configurations under
+identical input conditions.
+
+Depending on the selected optimization mode, input images are encoded as follows:
+in the baseline configuration, each pixel is transmitted using a 16-bit signed
+fixed-point representation (Q8.8), resulting in two bytes per pixel.
+In the Tip~1 and Tip~1+Tip~2 configurations, pixels are transmitted using a compact
+8-bit unsigned format (Q0.8), reducing the UART bandwidth requirement by a factor
+of two.
+In this case, input samples are reconstructed on-board to match the internal
+fixed-point format used by the network.
+
+UART reception, DNN inference, and output printing are explicitly timed using the
+ARM Cortex-A9 Global Timer.
+For each image, the total iteration time is decomposed into three components:
+UART reception latency (RX), neural network inference time (DNN), and printing
+overhead.
+This separation enables a clear distinction between I/O-bound and compute-bound
+contributions and allows an accurate assessment of the impact of the proposed
+optimizations.
+
+All performance results presented in the following sections therefore reflect
+runtime behavior under realistic streaming conditions and do not include any
+offline or preloaded test cases.
+
+\section{Runtime Performance Results}
+
+As described in the previous section, all measurements are performed under
+steady-state execution, without resetting the board between successive inputs,
+and using a fixed sequence of ten images corresponding to digits from 0 to 9.
+
+Table~\ref{tab:perf_summary} summarizes the measured execution times for the
+three considered configurations: baseline, Tip~1, and Tip~1+Tip~2.
+For each image, the total iteration time is decomposed into UART reception time
+(RX), neural network inference time (DNN), and printing overhead (PRINT).
+
+Across all configurations, the DNN inference time remains nearly constant,
+with an average execution time of approximately 3~ms.
+This behavior is expected, as the network topology, number of operations, and
+execution flow are identical in all cases, and no computational optimizations
+(e.g., parallelization or vectorization) are applied.
+
+In contrast, the UART reception time exhibits a significant reduction when
+switching from the baseline configuration to the optimized modes.
+In the baseline case, where each pixel is transmitted using a 16-bit Q8.8
+representation, the RX time dominates the overall iteration time, reaching
+several seconds per image.
+When Tip~1 is enabled, input pixels are transmitted using an 8-bit Q0.8 format,
+resulting in a substantial reduction of UART latency.
+This improvement directly translates into a shorter end-to-end iteration time,
+while preserving identical inference behavior.
+
+The Tip~1+Tip~2 configuration further reduces memory usage by adopting Q1.7
+weights and biases.
+However, as parameter transmission occurs only once at startup, this
+optimization does not significantly affect runtime latency.
+The observed performance gains in this configuration are therefore almost
+entirely attributable to the reduced UART input bandwidth introduced by Tip~1.
+
+Overall, the results clearly demonstrate that, for UART-based streaming
+applications, system performance is primarily constrained by communication
+latency rather than computation.
+The proposed optimizations effectively address this bottleneck without
+altering the network topology or inference accuracy.
+
+
 
 \section{Compute-Only Throughput}
 
@@ -1568,8 +1672,12 @@ dynamic range available during accumulation in fully connected layers.
 This reduces the likelihood of saturation effects, particularly in deeper network
 configurations such as the custom Group~4 topology.
 
-Experimental validation confirms that functional correctness and classification
-behavior are preserved under the optimized configuration.
+Experimental validation confirms that functional correctness is preserved under
+the optimized configuration.
+A limited number of misclassifications were observed during runtime execution
+with UART-streamed inputs, indicating a trade-off between reduced precision and
+classification robustness.
+
 No instability or anomalous behavior was observed during extended execution,
 demonstrating that the alternative fixed-point representation is fully compatible
 with the implemented inference pipeline and does not compromise numerical
@@ -1689,6 +1797,9 @@ introduced by UART-based image transmission.
 As a consequence, the system operates in a communication-bound regime, while the
 inference pipeline itself fully satisfies real-time execution requirements with
 large timing margins.
+
+
+
 
 Cycle-accurate measurements obtained using the ARM Global Timer provided detailed
 insight into the contribution of each processing stage.
@@ -2357,6 +2468,7 @@ label={lst:results_txt}
 ]
 
 
+
 Started
 
 
@@ -2410,61 +2522,61 @@ Expected = 9, Predicted = 9
 Waiting for image...
 Predicted digit = 0
 
-TIMING us: RX=21890175 DNN=2989 PRINT=18 ITER=21893183
+TIMING us: RX=9095894 DNN=2989 PRINT=18 ITER=9098902
 
 
 Waiting for image...
 Predicted digit = 1
 
-TIMING us: RX=3964751 DNN=2988 PRINT=18 ITER=3967758
+TIMING us: RX=3568231 DNN=2988 PRINT=18 ITER=3571239
 
 
 Waiting for image...
 Predicted digit = 2
 
-TIMING us: RX=5100474 DNN=2988 PRINT=17 ITER=5103480
+TIMING us: RX=3105781 DNN=2988 PRINT=17 ITER=3108787
 
 
 Waiting for image...
 Predicted digit = 3
 
-TIMING us: RX=3776143 DNN=2988 PRINT=17 ITER=3779150
+TIMING us: RX=3226787 DNN=2988 PRINT=17 ITER=3229794
 
 
 Waiting for image...
 Predicted digit = 4
 
-TIMING us: RX=4370541 DNN=2989 PRINT=18 ITER=4373549
+TIMING us: RX=3213994 DNN=2989 PRINT=18 ITER=3217002
 
 
 Waiting for image...
 Predicted digit = 3
 
-TIMING us: RX=5415004 DNN=2988 PRINT=17 ITER=5418010
+TIMING us: RX=3711176 DNN=2988 PRINT=17 ITER=3714182
 
 
 Waiting for image...
 Predicted digit = 6
 
-TIMING us: RX=8484352 DNN=2988 PRINT=18 ITER=8487359
+TIMING us: RX=3585874 DNN=2988 PRINT=18 ITER=3588881
 
 
 Waiting for image...
 Predicted digit = 7
 
-TIMING us: RX=4469596 DNN=2988 PRINT=18 ITER=4472603
+TIMING us: RX=3167111 DNN=2987 PRINT=18 ITER=3170117
 
 
 Waiting for image...
 Predicted digit = 8
 
-TIMING us: RX=3300936 DNN=2988 PRINT=18 ITER=3303943
+TIMING us: RX=3491976 DNN=2989 PRINT=18 ITER=3494984
 
 
 Waiting for image...
 Predicted digit = 9
 
-TIMING us: RX=3577633 DNN=2988 PRINT=19 ITER=3580641
+TIMING us: RX=3181613 DNN=2988 PRINT=19 ITER=3184620
 
 
 Waiting for image...
@@ -2523,61 +2635,61 @@ Expected = 9, Predicted = 9
 Waiting for image...
 Predicted digit = 0
 
-TIMING us: RX=11948640 DNN=2989 PRINT=18 ITER=11951648
+TIMING us: RX=9268721 DNN=2989 PRINT=18 ITER=9271728
 
 
 Waiting for image...
 Predicted digit = 1
 
-TIMING us: RX=3431864 DNN=2988 PRINT=18 ITER=3434871
+TIMING us: RX=3024197 DNN=2988 PRINT=18 ITER=3027205
 
 
 Waiting for image...
 Predicted digit = 2
 
-TIMING us: RX=3197234 DNN=2988 PRINT=17 ITER=3200241
+TIMING us: RX=2586165 DNN=2988 PRINT=17 ITER=2589171
 
 
 Waiting for image...
 Predicted digit = 3
 
-TIMING us: RX=2947756 DNN=2988 PRINT=17 ITER=2950763
+TIMING us: RX=2963065 DNN=2988 PRINT=17 ITER=2966072
 
 
 Waiting for image...
 Predicted digit = 4
 
-TIMING us: RX=3132731 DNN=2988 PRINT=18 ITER=3135738
+TIMING us: RX=2570522 DNN=2988 PRINT=18 ITER=2573529
 
 
 Waiting for image...
 Predicted digit = 3
 
-TIMING us: RX=3086343 DNN=2989 PRINT=18 ITER=3089350
+TIMING us: RX=2697534 DNN=2988 PRINT=18 ITER=2700541
 
 
 Waiting for image...
 Predicted digit = 6
 
-TIMING us: RX=3306767 DNN=2989 PRINT=18 ITER=3309775
+TIMING us: RX=2759715 DNN=2988 PRINT=18 ITER=2762722
 
 
 Waiting for image...
 Predicted digit = 7
 
-TIMING us: RX=3179996 DNN=2989 PRINT=18 ITER=3183004
+TIMING us: RX=2775086 DNN=2989 PRINT=18 ITER=2778094
 
 
 Waiting for image...
 Predicted digit = 8
 
-TIMING us: RX=3462245 DNN=2989 PRINT=18 ITER=3465253
+TIMING us: RX=2538270 DNN=2988 PRINT=18 ITER=2541277
 
 
 Waiting for image...
 Predicted digit = 9
 
-TIMING us: RX=2916565 DNN=2988 PRINT=19 ITER=2919573
+TIMING us: RX=2697155 DNN=2988 PRINT=19 ITER=2700163
 
 
 Waiting for image...
@@ -2636,64 +2748,65 @@ Expected = 9, Predicted = 9
 Waiting for image...
 Predicted digit = 0
 
-TIMING us: RX=11134470 DNN=2988 PRINT=18 ITER=11137478
+TIMING us: RX=2300112 DNN=2989 PRINT=18 ITER=2303119
 
 
 Waiting for image...
 Predicted digit = 1
 
-TIMING us: RX=6137062 DNN=2988 PRINT=19 ITER=6140070
+TIMING us: RX=3024872 DNN=2987 PRINT=18 ITER=3027878
 
 
 Waiting for image...
 Predicted digit = 2
 
-TIMING us: RX=2723557 DNN=2989 PRINT=18 ITER=2726564
+TIMING us: RX=2932178 DNN=2988 PRINT=17 ITER=2935185
 
 
 Waiting for image...
 Predicted digit = 3
 
-TIMING us: RX=3369838 DNN=2988 PRINT=18 ITER=3372845
+TIMING us: RX=2712982 DNN=2989 PRINT=17 ITER=2715989
 
 
 Waiting for image...
 Predicted digit = 4
 
-TIMING us: RX=3087430 DNN=2988 PRINT=19 ITER=3090437
+TIMING us: RX=2915089 DNN=2988 PRINT=18 ITER=2918096
 
 
 Waiting for image...
-Predicted digit = 0
+Predicted digit = 5
 
-TIMING us: RX=3883511 DNN=2989 PRINT=17 ITER=3886518
+TIMING us: RX=2977056 DNN=2988 PRINT=17 ITER=2980062
 
 
 Waiting for image...
 Predicted digit = 6
 
-TIMING us: RX=3416225 DNN=2988 PRINT=18 ITER=3419231
+TIMING us: RX=2682027 DNN=2987 PRINT=18 ITER=2685033
 
 
 Waiting for image...
 Predicted digit = 7
 
-TIMING us: RX=3071311 DNN=2988 PRINT=18 ITER=3074319
+TIMING us: RX=2839565 DNN=2988 PRINT=18 ITER=2842572
 
 
 Waiting for image...
 Predicted digit = 8
 
-TIMING us: RX=2838059 DNN=2989 PRINT=18 ITER=2841066
+TIMING us: RX=2851997 DNN=2988 PRINT=18 ITER=2855005
 
 
 Waiting for image...
 Predicted digit = 9
 
-TIMING us: RX=3246022 DNN=2988 PRINT=19 ITER=3249031
+TIMING us: RX=2569450 DNN=2987 PRINT=19 ITER=2572456
 
 
 Waiting for image...
+
 
 \end{lstlisting}
 

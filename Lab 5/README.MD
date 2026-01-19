@@ -1,23 +1,38 @@
 # **Lab 5 – Deep Neural Network Inference on MNIST (UART Microserver)**
 
+This repository contains the full implementation of **Lab 5** for the  
+**Advanced Embedded Systems** course (University of Cagliari).
+
+The project focuses on the deployment of a **Deep Neural Network (DNN) inference
+pipeline** on an embedded platform, implemented entirely in software on the
+**ARM Cortex-A9 Processing System** of the Zybo Z7 board.
+
+The application operates as a **UART-based microserver**, receiving MNIST images
+from a host PC, performing fixed-point inference, and returning the predicted
+digit, while measuring execution time using the **ARM Global Timer**.
 ---
 
 ## **Overview**
 
-This assignment is related to **Lab 5 – Implementing a DNN-based classification microserver on the Zybo Z7**.
+This assignment is related to **Lab 5 – DNN-based Inference on Embedded Systems**.
 
-The goal is to implement a **fully working inference pipeline** for handwritten digit recognition using a **Deep Neural Network (DNN)** executed on the **ARM Cortex-A9 Processing System**, with input images received through **UART**.
+The objective is to design and implement a **bare-metal inference microserver**
+that:
 
-The microserver must:
+1. Receives a **28×28 grayscale MNIST image** via UART  
+2. Executes a **fully-connected DNN** using fixed-point arithmetic  
+3. Returns the predicted digit (0–9) over UART  
+4. Measures execution time for:
+   * UART reception
+   * DNN inference
+   * Output/printing overhead
+5. Repeats the experiment using:
+   * a **custom network topology** (Group 4)
+   * **UART and data-representation optimizations** (TIP 1, TIP 2)
 
-1. Receive a **28×28 grayscale image** (784 signed 16-bit integers) from UART
-2. Process it using a **fixed-point DNN** implemented in C
-3. Output the recognized digit (0–9) back to UART
-4. Measure execution times using the **Global Timer**
-5. Repeat the entire design for a **custom network topology**, assigned by the student’s group
-
-This lab introduces **model inference on embedded systems**, **UART-based microservers**, **layer-by-layer DNN composition**, and **low-level performance profiling**.
-
+This lab introduces **embedded AI inference**, **fixed-point DNN implementation**,
+**UART microservers**, and **application-level performance profiling** without OS
+support.
 ---
 
 ## **Hardware System**
@@ -231,32 +246,52 @@ Repeat:
 
 ## **Project Structure**
 
-```
 
+
+```
 
 Lab 5/
 │
-├── lab5_mnist.c                   → Base implementation (uses weights.h & test_images.h)
-├── lab5_mnist_custom.c            → Custom DNN (784→64→32→16→10), weights via UART
-├── lab5_mnist_custom+TIPS.c       → Custom DNN with UART optimizations (Q0.8 images, Q1.7 weights)
+├── AES/                                → Complete Xilinx SDK 2019.1 workspace
+│   ├── lab5_mnist/                     → SDK project: base MNIST DNN (Q8.8)
+│   ├── lab5_mnist_custom_TIPS/         → SDK project: custom Group 4 DNN with TIP1/TIP2
+│   ├── lab5_mnist_bsp/                 → BSP for base project
+│   ├── lab5_mnist_custom_TIPS_bsp/     → BSP for optimized custom project
+│   └── design_1_wrapper_hw_platform_0  → Exported Vivado hardware platform
 │
-├── group_4/                       → Custom network bin files for your group
+├── lab5_mnist.c                        → Base MNIST inference (784→64→32→10, Q8.8)
+├── lab5_mnist_custom_TIPS.c            → Group 4 custom DNN
+│                                         (784→64→32→16→10,
+│                                          MODE_BASELINE / TIP1 / TIP1+TIP2)
 │
-├── mnist_from_uart-main/          → Reference UART sender + example Python tools
+├── group_4/                            → Group 4 resources:
+│                                         • ONNX model
+│                                         • binary weights / biases
+│                                         • reference test images
 │
-├── AES/                           → Full Xilinx SDK 2019.1 workspace
-│   ├── lab5_mnist/                → SDK project (Base MNIST DNN)
-│   ├── lab5_mnist_custom/         → SDK project (Custom 4-layer DNN)
-│   ├── lab5_mnist_custom_TIPS/    → SDK project (Optimized UART I/O, Q-format reductions)
-│   ├── lab5_mnist_bsp/            → BSP for base project
-│   ├── lab5_mnist_custom_bsp/     → BSP for custom DNN
-│   ├── lab5_mnist_custom_TIPS_bsp/     → BSP for optimized variant
-│   ├── design_1_wrapper_hw_platform_0/
-│   │       └── design_1_wrapper.hdf  → Exported Vivado hardware platform
-│   └── SDK.log                    → Build / debug session log
+├── comparison_images/                  → Visual comparison and debugging material
+│                                         (original vs processed MNIST samples)
 │
-└── README.md                      → Lab documentation
-
+├── mnist_from_uart-main/               → Reference UART sender tools
+│                                         (Python scripts and examples)
+│
+├── test/                               → Images to testing 
+│
+├── utils/                              → Offline preprocessing and verification tools:
+│   ├── bin2weights.py                  → Binary → C header conversion
+│   ├── images_test_bin.py              → Test image generation
+│   ├── tip1_q88_to_q08.py              → Q8.8 → Q0.8 image conversion (TIP1)
+│   └── verify_custom_dnn.py            → Python reference DNN verification
+│
+├── weights.h                           → Base network weights (Q8.8)
+├── weights_group4.h                    → Group 4 weights (Q8.8 / Q1.7)
+├── test_images.h                       → Embedded reference MNIST images
+│
+├── Tips and tricks for optimization.pdf → Instructor-provided optimization guidelines
+├── results.txt                         → Collected timing and accuracy results
+├── README.md                           → Lab documentation (this file)
+│
+└── main.pdf                             Final experimental report
 
 ```
 

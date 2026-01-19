@@ -299,9 +299,17 @@ static inline DATA readPixel_Q88_fromUART(void) {
 }
 
 /* Tip 1: Q0.8 input (1 byte), reconstructed on-board */
-static inline DATA readPixel_Q08_fromUART(void) {
+static inline DATA readPixel_Q08_fromUART(void)
+{
     u8 p = uart_inbyte();
+
+#if (FIXED_POINT_MODE == MODE_TIP1_TIP2)
+    // Align Q0.8 input to internal QF=7 (Q0.7)
+    return (DATA)(p >> 1);
+#else
+    // Baseline and Tip 1: internal QF=8 (Q0.8)
     return (DATA)p;
+#endif
 }
 
 
