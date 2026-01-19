@@ -53,7 +53,7 @@ import matplotlib.pyplot as plt
 # received or prepared for UART testing.
 
 TEST_IMAGES_H = r"D:\DATI LELLO\ingegneria_informatica\UNICA LM Cyber\AES\Lab 5\test_images.h"
-BIN_DIR = r"/Lab 5/mnist_from_uart-main/mnist_digits_bin"
+BIN_DIR = r"D:\DATI LELLO\ingegneria_informatica\UNICA LM Cyber\AES\Lab 5\mnist_from_uart-main\mnist_digits_bin"
 
 OUT_IMG_DIR = Path("../comparison_images")
 OUT_IMG_DIR.mkdir(exist_ok=True)

@@ -28,6 +28,15 @@ The adopted approach emphasizes explicit control over data representation,
 memory organization, and execution flow, which are key aspects in the context of
 Advanced Embedded Systems.
 
+From an architectural perspective, the proposed implementation explicitly follows
+a reduced instruction set execution model, where computation is expressed through
+regular load--compute--store patterns and deterministic control flow.
+Although the target processor is an ARM Cortex-A9, the adopted execution model
+closely reflects the RISC/MIPS principles introduced in the Advanced Embedded
+Systems course, particularly in terms of instruction simplicity, predictable
+memory access, and stable execution timing.
+
+
 The implemented DNN processes grayscale images of size $28 \times 28$ pixels and
 classifies each input sample as a digit in the range from 0 to 9.
 Inference is carried out using fixed-point arithmetic, allowing the elimination of
@@ -100,7 +109,7 @@ computation time, which is essential for meaningful performance analysis.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.75\textwidth]{images/tip1 stampa}
+    \includegraphics[width=0.95\textwidth]{images/tip1 stampa}
     \caption{RealTerm serial/TCP terminal used to transmit binary MNIST data streams over UART.}
     \label{fig:realterm}
 \end{figure}
@@ -137,7 +146,7 @@ Figure~\ref{fig:mnist}.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{images/test_image}
+    \includegraphics[width=0.95\textwidth]{images/test_image}
     \caption{Example of a MNIST handwritten digit image used as input for the DNN inference.}
     \label{fig:mnist}
 \end{figure}
@@ -182,6 +191,23 @@ implemented as separate processing stages.
 This clear separation of stages facilitates debugging, profiling, and further
 optimization.
 
+For a fully connected layer with $N$ input features and $M$ output neurons,
+the computational workload can be expressed in terms of multiply--accumulate
+operations as:
+
+\[
+\text{MACs} = N \times M
+\]
+
+In the baseline network, the first fully connected layer
+($784 \rightarrow 64$) therefore requires:
+
+\[
+784 \times 64 = 50{,}176 \text{ MAC operations}
+\]
+
+which dominates the overall computational cost of the inference pipeline.
+
 \section{Custom Network Topology (Group 4)}
 
 In addition to the baseline network, a custom DNN topology was implemented
@@ -207,9 +233,9 @@ single inference.
 Figure~\ref{fig:onnx_group4} illustrates the custom DNN topology as visualized
 using Netron.
 
-\begin{figure}[H]
+\begin{figure}[!h]
     \centering
-    \includegraphics[width=0.22\textwidth]{images/onnx_model_group_4}
+    \includegraphics[width=0.40\textwidth]{images/onnx_model_group_4}
     \caption{Custom DNN topology for Group 4 visualized using Netron.}
     \label{fig:onnx_group4}
 \end{figure}
@@ -352,6 +378,14 @@ This implementation directly reflects the arithmetic structure of the DNN and
 allows fine-grained control over scaling and precision at each layer.
 The adopted fixed-point MAC strategy is conceptually illustrated in
 Figure~\ref{fig:fixed_point_math}.
+
+At instruction level, each MAC operation maps naturally to a RISC-style
+instruction sequence, composed of operand loads, an integer multiplication,
+and an integer addition.
+This load--compute--store execution pattern is fully consistent with the MIPS
+architectural model, where arithmetic instructions operate exclusively on
+register operands and memory accesses are explicitly managed through load and
+store instructions.
 
 
 \section{Saturation and Overflow Control}
@@ -575,7 +609,7 @@ execution, and classification result transmission during the validation phase.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.65 \textwidth]{images/lab5_predicted_base}
+    \includegraphics[width=0.70 \textwidth]{images/lab5_predicted_base}
   \caption{UART-based streaming and inference for a MNIST image during
     functional validation, showing input reception, predicted class, and serial
     output.}
@@ -700,6 +734,19 @@ through the \texttt{XTime\_GetTime()} API.
 The Global Timer implements a free-running 64-bit counter incremented at a fixed
 frequency, allowing direct measurement of elapsed clock cycles with minimal
 instrumentation overhead.
+
+From an architectural point of view, the execution time of a fully connected
+layer can be approximated as:
+
+\[
+T_{\text{FC}} \approx \text{MACs} \times \text{CPI} \times T_{\text{clk}}
+\]
+
+Under steady-state conditions, the CPI remains approximately constant due to
+the absence of data-dependent branches and the regular instruction mix of the
+inference loop.
+As a result, execution time scales linearly with the number of MAC operations,
+which is a characteristic behavior of RISC/MIPS-style workloads.
 
 In the implemented code, timing is performed by reading the Global Timer counter
 at multiple points within the main inference loop.
@@ -891,190 +938,407 @@ assessing the real-time feasibility of the proposed microserver architecture.
 By clearly distinguishing between communication and computation costs, the
 adopted methodology enables informed design decisions and avoids misleading
 performance interpretations.
-ntitative evaluation of software
-optimizations and architectural design choices.
-
 
 
 
 \chapter{Optimization Tips and Custom Enhancements}
 
-In addition to the baseline implementation, several optimization strategies were
-explored by modifying the representation of input data and network parameters, as
-suggested in the laboratory guidelines.
-The objective of these enhancements is not to alter the functional behavior of the
-DNN inference pipeline, but to improve system-level efficiency, numerical robustness,
-and configurability under embedded constraints.
+In addition to the baseline implementation, a set of optimization strategies was
+introduced in accordance with the laboratory guidelines, with the objective of
+improving communication efficiency, numerical robustness, and overall system
+configurability, without modifying the functional behavior of the DNN inference
+pipeline.
 
-All optimizations are implemented in a configurable and modular manner, enabling
-direct comparison between baseline and optimized configurations through compile-time
-selection, without modifying the overall software architecture or control flow.
+All optimizations are implemented in a modular and compile-time configurable
+manner, enabling direct and fair comparison between baseline and optimized
+configurations under identical execution conditions.
+Importantly, all optimization steps affecting data representation are performed
+\emph{offline} on the host PC, ensuring that no additional runtime overhead is
+introduced on the embedded platform and preserving deterministic execution
+behavior.
 
-\section{Input Data Optimization}
+This chapter describes the adopted optimization techniques at a system level,
+while detailed implementation scripts and validation tools are reported in
+Appendix~\ref{chap:appendix}.
 
-In the baseline configuration, input images are transmitted via UART using a Q8.8
+\section{Input Data Optimization (Tip 1)}
+
+The baseline configuration transmits MNIST input images over UART using a Q8.8
 fixed-point representation, where each pixel is encoded using two bytes.
-While this format simplifies direct integration with the internal fixed-point
+Although this format simplifies direct integration with the internal fixed-point
 pipeline, it introduces a significant communication overhead on a low-bandwidth
 serial interface.
 
-As an optimization, input images are alternatively transmitted using a more compact
-Q0.8 representation, where each pixel is encoded using a single byte.
-On the embedded platform, pixel values are reconstructed into the internal
-fixed-point representation before being processed by the DNN.
+To address this limitation, an optimized input streaming mode (Tip~1) was
+implemented, in which input images are transmitted using a compact Q0.8
+representation.
+In this format, each pixel is encoded using a single byte, effectively reducing
+the UART payload size by approximately 50\%.
 
-This optimization effectively reduces the amount of data transferred over UART by
-approximately 50\%, leading to a proportional reduction in image reception time.
-Experimental measurements confirm that this optimization primarily affects
-communication latency, while leaving the computational behavior of the inference
-pipeline unchanged.
+The rationale behind this optimization relies on the numerical properties of the
+MNIST dataset.
+Since MNIST pixel values are normalized in the range \([0,1)\), their Q8.8
+fixed-point representation always fits within the interval \([0x0000, 0x00FF]\),
+making the most significant byte redundant for transmission purposes.
 
-From a system-level perspective, this approach directly targets the dominant
-bottleneck identified in the baseline analysis, namely UART-based data transfer,
-and therefore represents a communication-oriented optimization rather than a
-computational one.
+The conversion from Q8.8 to Q0.8 is performed offline using a dedicated Python
+script, which extracts the least significant byte, applies defensive clipping,
+and generates compact binary payloads suitable for UART transmission.
+This preprocessing step is fully deterministic and does not alter the numerical
+content of the input data.
 
-\section{Weight and Bias Representation}
+The offline conversion procedure and the corresponding Python implementation are
+described in detail in Appendix~\ref{sec:appendix_tip1}, while functional and
+performance validation results are discussed in Chapters~6 and~9.
 
-A second optimization concerns the representation of network weights and biases.
+The activation of the Tip~1 optimization is explicitly reported at runtime through
+serial debug output, confirming the selected input data representation and ensuring
+experimental traceability.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{images/tip1 stampa}
+    \caption{Console output showing the activation of the Tip~1 input streaming
+    optimization. The message confirms the use of compact Q0.8 input data for
+    UART transmission, enabling reduced communication payload without modifying
+    the internal fixed-point inference pipeline.}
+    \label{fig:tip1_activation}
+\end{figure}
+
+Figure~\ref{fig:tip1_activation} shows a representative console output captured
+during execution, indicating that compact Q0.8 input streaming is enabled.
+
+
+\section{Weight and Bias Representation Optimization (Tip 2)}
+
+A second optimization targets the representation of network weights and biases.
 In the baseline configuration, all parameters are encoded using a Q8.8 fixed-point
-format.
-While sufficient for MNIST classification, this format may limit dynamic range and
-increase the risk of saturation effects in deeper network configurations.
-
-To address this issue, an alternative Q1.7 representation is adopted for weights and
-biases.
-By allocating an additional bit to the integer part, this format increases dynamic
-range while preserving fractional precision compatible with 16-bit fixed-point
-arithmetic.
-
-In the implemented system, the conversion from Q8.8 to Q1.7 is performed offline,
-and parameters are stored directly in the optimized format.
-As a result, no additional runtime overhead is introduced, and deterministic
-execution behavior is preserved.
-
-Experimental validation confirms that the use of Q1.7 weights and biases improves
-numerical robustness and reduces the likelihood of saturation during accumulation,
-particularly in the custom Group~4 network topology, without affecting functional
-correctness.
-
-\section{Configurability and Scalability}
-
-All optimization options are controlled through compile-time configuration flags.
-This design choice allows rapid switching between baseline and optimized operating
-modes, facilitating systematic experimental evaluation and reproducibility of
-performance results.
-
-The same software framework supports both the baseline and custom DNN topologies,
-demonstrating the scalability and modularity of the implementation.
-Network depth, layer dimensions, and fixed-point formats can be modified without
-affecting the overall structure of the code, highlighting the generality of the
-adopted design.
-
-\section{Impact on Performance}
-
-Experimental results show that the explored optimizations do not compromise the
-functional correctness of the DNN inference.
-Instead, they provide tangible benefits in terms of reduced communication overhead
-and improved numerical stability.
-
-In particular, input data optimization directly reduces UART reception time, while
-the alternative representation of weights and biases enhances robustness in deeper
+format, which provides adequate precision but may limit dynamic range in deeper
 network configurations.
-These results confirm that careful data representation choices and system-level
-design decisions play a crucial role in achieving efficient and scalable embedded
-AI implementations, even in the absence of hardware acceleration.
+
+To improve numerical robustness, an alternative Q1.7 fixed-point representation
+was adopted for weights and biases (Tip~2).
+By allocating one additional bit to the integer part, this format increases the
+dynamic range available during accumulation, reducing the likelihood of
+saturation effects while preserving compatibility with 16-bit integer arithmetic.
+
+The conversion from Q8.8 to Q1.7 is performed offline using a dedicated Python
+script that applies an arithmetic right shift and explicit saturation to the
+target range.
+The resulting parameters are embedded directly into the application as static C
+macros, ensuring that no runtime conversion or additional computation is required
+on the embedded platform.
+
+The complete conversion procedure, including the Python script used to generate
+both baseline and optimized parameter sets, is documented in
+Appendix~\ref{sec:appendix_tip2}.
+Experimental validation confirms that the optimized representation preserves
+functional correctness while improving numerical stability, particularly for the
+custom Group~4 network topology.
+
+The activation of the combined optimization configuration is explicitly reported
+at runtime through serial debug output, ensuring experimental traceability and
+correct configuration selection.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{images/tip1 e tip2 stampa}
+    \caption{Console output showing the simultaneous activation of Tip~1 and Tip~2.
+    The message confirms the use of compact Q0.8 input data for UART transmission
+    together with Q1.7 fixed-point representation for network weights and biases,
+    enabling reduced communication overhead and improved numerical robustness
+    without runtime overhead.}
+    \label{fig:tip1_tip2_activation}
+\end{figure}
+
+Figure~\ref{fig:tip1_tip2_activation} shows a representative console output captured
+during execution, confirming that both Tip~1 and Tip~2 are enabled simultaneously.
+
+
+\section{Compile-Time Configurability and Experimental Fairness}
+
+Both optimization tips are controlled exclusively through compile-time
+configuration flags.
+This design choice ensures that:
+\begin{itemize}
+    \item execution paths remain identical across configurations,
+    \item no runtime branching or configuration-dependent control flow is introduced,
+    \item timing measurements reflect only the impact of data representation choices.
+\end{itemize}
+
+By performing all preprocessing offline and selecting configurations at compile
+time, the system guarantees deterministic execution behavior and enables fair,
+reproducible performance comparisons between baseline and optimized modes.
+
+The same software framework supports:
+(i) the baseline configuration,
+(ii) the input-optimized configuration (Tip~1),
+and (iii) the combined optimized configuration (Tip~1 + Tip~2),
+without requiring changes to the core inference logic or communication protocol.
+
+\section{Scalability and Impact on System Performance}
+
+The adopted optimization strategies demonstrate that, in a UART-based embedded
+DNN microserver, overall system performance is dominated by communication latency
+rather than by computational workload.
+As a result, optimizations targeting data representation and transmission
+efficiency yield significantly greater benefits than purely computational
+enhancements.
+
+Experimental results presented in Chapter~9 show that Tip~1 directly reduces UART
+reception time and overall iteration latency, while Tip~2 improves numerical
+robustness without affecting execution time.
+The combination of both optimizations results in a more balanced and scalable
+system design, fully compatible with deeper network topologies and more demanding
+operating conditions.
+
 
 
 \chapter{Validation and Debugging of Input Data Consistency}
 
-During functional validation of the baseline and custom DNN architectures,
-an anomalous classification behavior was observed for a specific input class.
-In particular, both the baseline network and the custom Group~4 topology
-systematically failed to correctly classify the handwritten digit ``5'',
-while all other digits were recognized correctly.
+During the functional validation of both the baseline and custom DNN architectures,
+an anomalous and systematic misclassification behavior was observed for a specific
+input class.
+In particular, the handwritten digit ``5'' was consistently misclassified by the
+embedded inference system, while all other digits in the MNIST test set were
+recognized correctly.
 
-This behavior was observed consistently across multiple executions and fixed-point
-configurations, suggesting that the issue was not related to numerical instability,
-quantization effects, or network topology, but rather to a potential inconsistency
-in the input data representation.
+This behavior was reproducible across multiple executions, fixed-point
+configurations (Q8.8 and Q1.7), and network topologies, including both the baseline
+architecture and the deeper custom Group~4 model.
+Such consistency strongly suggested that the issue was not related to numerical
+instability, fixed-point quantization effects, or architectural limitations of the
+DNN itself.
 
-Given that the same DNN parameters correctly classified the digit ``5'' when using
-embedded test images, the source of the misclassification was hypothesized to lie
-in the preprocessing or transmission pipeline of the MNIST images used for
-UART-based inference.
+This hypothesis was further reinforced by the observation that the same trained
+network parameters correctly classified the digit ``5'' when inference was
+performed using statically linked MNIST test images embedded directly in the C
+source code.
+As a result, attention was shifted away from the inference pipeline and toward the
+data preprocessing and transmission stages involved in UART-based input streaming.
 
-In particular, possible causes included:
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \node[anchor=south west, inner sep=0] (img)
+            {\includegraphics[width=1\textwidth]{images/lab5_start_test}};
+        \begin{scope}[x={(img.south east)}, y={(img.north west)}]
+            \draw[red, very thick, ->]
+                (0.49,0.44) -- (0.39,0.54);
+            \node[red, font=\bfseries]
+                at (0.51,0.42) {misclassification};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Runtime serial output showing misclassification of the handwritten
+    digit ``5''. The red arrow highlights the incorrect predicted class.}
+    \label{fig:digit5_baseline_arrow}
+\end{figure}
+
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \node[anchor=south west, inner sep=0] (img)
+            {\includegraphics[width=1\textwidth]{images/lab5_start_test_Custom}};
+        \begin{scope}[x={(img.south east)}, y={(img.north west)}]
+            \draw[red, very thick, ->]
+                (0.49,0.50) -- (0.39,0.60);
+            \node[red, font=\bfseries]
+                at (0.51,0.48) {misclassification};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Runtime serial output for the custom Group~4 network.
+    The red arrow highlights the same systematic misclassification observed
+    in the baseline configuration.}
+    \label{fig:digit5_custom_arrow}
+\end{figure}
+
+
+The misclassification of the digit ``5'' is directly observable at runtime through
+the serial output produced by the embedded system.
+Figure~\ref{fig:digit5_baseline_arrow} and Figure~\ref{fig:digit5_custom_arrow}shows that the same incorrect
+classification occurs in both the baseline and custom network configurations,
+providing strong evidence that the anomaly is not related to the DNN architecture
+or fixed-point arithmetic, but rather to inconsistencies in the input data used
+during UART-based inference.
+
+\section{Hypothesis and Debugging Strategy}
+
+Based on the observed behavior, the root cause of the misclassification was
+hypothesized to lie in an inconsistency between the embedded MNIST images used for
+offline validation and the binary images transmitted to the embedded platform via
+UART.
+Possible sources of discrepancy included:
 \begin{itemize}
-    \item unintended scaling differences between embedded images and binary images;
-    \item truncation effects introduced during fixed-point format conversion;
+    \item unintended scaling differences introduced during fixed-point conversion;
+    \item truncation or clipping effects affecting a subset of pixel values;
     \item endianness mismatches in binary file generation or parsing;
-    \item inconsistencies between statically linked test images and externally
-          streamed input data.
+    \item inconsistencies between statically defined C macros and externally stored
+          binary image files.
 \end{itemize}
 
-To systematically investigate these hypotheses, a dedicated offline validation
-and debugging tool was developed to perform a pixel-wise consistency check between
-embedded MNIST images and their corresponding binary representations.
-The validation tool, implemented in Python and reported in
-Appendix~\ref{sec:appendix_validation}, compares:
-(i) MNIST images embedded in the C source code as static macros
-(\texttt{test\_images.h, imm\_test\_X}), and
-(ii) MNIST images stored as raw binary files (\texttt{.bin}) used for UART-based
-inference testing.
+Given that the DNN inference pipeline itself is fully deterministic and identical
+across execution modes, even minor inconsistencies in input data representation
+can lead to significant changes in the activation patterns of early network layers,
+ultimately affecting classification outcomes.
 
-The script automatically detects the fixed-point scale of the binary images
-(Q8.8 or Q0.8), aligns representations, and computes pixel-wise differences.
-Both numerical diagnostics and visual comparisons are produced to support
-robust debugging and traceability.
+To systematically investigate these hypotheses, a dedicated offline validation and
+debugging procedure was developed.
+
+\section{Offline Pixel-Wise Consistency Verification}
+
+A dedicated Python-based validation tool was developed to perform a systematic
+pixel-wise consistency analysis between different MNIST image representations
+used throughout the experimental workflow.
+In particular, the tool compares:
+(i) MNIST images embedded directly in the C source code as static macros
+(\texttt{test\_images.h}, \texttt{imm\_test\_X}), and
+(ii) MNIST images stored as raw binary files (\texttt{.bin}) and streamed to the
+embedded platform via UART during online inference.
+
+The validation procedure, fully documented in
+Appendix~\ref{sec:appendix_validation}, is designed to operate deterministically
+and reproducibly.
+The script automatically parses embedded image definitions from the C header file,
+loads the corresponding binary image files, and detects the fixed-point scale of
+the binary data (Q8.8 or Q0.8) in order to align the two representations within a
+common numerical domain.
+
+After representation alignment through explicit scaling and normalization, the
+tool computes pixel-wise absolute differences and produces both numerical
+diagnostics and visual comparison plots.
+This dual quantitative and qualitative analysis enables precise identification of
+representation mismatches and supports robust debugging of the preprocessing and
+data transmission pipeline.
+
+Overall, this approach provides a rigorous and reproducible mechanism for
+verifying input data consistency, eliminating ambiguity in the interpretation of
+experimental results and ensuring full traceability between offline preprocessing,
+embedded execution, and performance evaluation stages.
+
+
+
+\section{Analysis of the Digit ``5'' Anomaly}
+
+The offline pixel-wise consistency analysis revealed that non-zero differences
+between embedded MNIST images and binary images used for UART-based inference are
+present across all digits.
+This behavior is expected, as the two representations originate from different
+preprocessing pipelines and fixed-point domains.
+
+However, the impact of such pixel-level discrepancies on classification accuracy
+is highly input-dependent.
+While for most digits the detected differences are either spatially diffuse or
+affect non-discriminative regions of the image, they do not significantly alter
+the activation patterns of the network and therefore do not affect the final
+classification outcome.
+
+In contrast, for the digit ``5'', the analysis revealed localized discrepancies
+affecting structurally and semantically relevant regions of the handwritten
+pattern.
+These differences are sufficient to modify the activation pattern already in the
+first fully connected layer (784~$\rightarrow$~64), and the resulting perturbation
+propagates through subsequent layers, ultimately leading to systematic
+misclassification.
+
+Figure~\ref{fig:digit5_diff} illustrates the outcome of this analysis for the digit
+``5''.
+The comparison highlights that, although pixel-wise differences are not unique to
+this digit, their spatial distribution and concentration on discriminative
+strokes play a critical role in determining their effect on inference results.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\textwidth]{images/digit_5_compare}
-    \caption{Offline consistency check for digit ``5''. From left to right:
-    embedded MNIST image (C macro), binary image used for UART-based inference,
-    and absolute pixel-wise difference.
-    The visualization highlights localized discrepancies responsible for
-    systematic misclassification.}
+    \caption{Offline pixel-wise consistency analysis for the handwritten digit
+    ``5''. From left to right: reference MNIST image embedded in the C source code,
+    corresponding binary image used for UART-based inference, and absolute
+    pixel-wise difference.
+    Localized discrepancies affecting discriminative regions of the digit are
+    clearly visible and explain the observed systematic misclassification.}
     \label{fig:digit5_diff}
 \end{figure}
 
-The consistency analysis revealed that the digit ``5'' exhibited non-zero
-pixel-wise differences between the embedded representation and the binary
-image used for UART-based inference, whereas all other digits showed either
-perfect or near-perfect correspondence.
+Importantly, these discrepancies are not caused by numerical precision limitations,
+fixed-point overflow, or instability of the inference pipeline.
+Instead, they originate from differences introduced during image preprocessing or
+binary file generation prior to UART transmission.
+This result confirms that the observed anomaly is input-driven and independent of
+both the DNN architecture and the fixed-point implementation.
+\section{Cross-Validation Using a Python Golden Model}
 
-As a consequence, the observed misclassification was attributed to input data
-inconsistencies rather than to deficiencies in the DNN architecture, fixed-point
-arithmetic, or inference pipeline.
+To further validate the conclusions drawn from the offline consistency analysis,
+the same binary input images were processed using a bit-accurate Python reference
+implementation of the DNN.
+The Python model was explicitly designed to mirror the embedded C implementation
+at the arithmetic and algorithmic level, including fixed-point data formats,
+explicit multiply--accumulate operations, bias handling, activation functions,
+and final classification logic.
 
-This validation step proved essential to ensure experimental correctness and
-demonstrates the importance of systematic data verification in embedded AI
-applications, where preprocessing and communication stages may silently introduce
-errors that are difficult to detect at runtime.
+The Python-based golden model, fully documented in
+Appendix~\ref{sec:appendix_dnn_golden}, produced classification results that are
+identical to those obtained on the embedded platform.
+In particular, when the inconsistent binary input image was used, the digit ``5''
+was systematically misclassified in the Python model as well, whereas correct
+classification was restored when the embedded reference image was provided as
+input.
 
+This result demonstrates that the observed anomaly is independent of the hardware
+platform, compiler, execution environment, and fixed-point implementation.
+Instead, it conclusively confirms that the misclassification originates solely
+from inconsistencies in the input data representation used during UART-based
+inference.
+
+\section{Implications for Experimental Correctness}
+
+The validation and debugging procedure described in this chapter proved essential
+to ensure the correctness, interpretability, and reliability of the experimental
+results presented in this work.
+Without systematic verification of input data consistency, the observed anomaly
+could have been incorrectly attributed to limitations of the DNN architecture,
+quantization strategy, or embedded execution environment.
+
+The adopted methodology highlights the importance of rigorous data validation in
+embedded AI systems, where preprocessing and communication stages are often
+external to the inference engine and may silently introduce errors that are
+difficult to detect at runtime.
+Such errors can lead to systematic misclassification while remaining invisible to
+standard performance and timing analyses.
+
+From an Advanced Embedded Systems perspective, this case study demonstrates that
+robust system validation must extend beyond algorithmic correctness and include
+end-to-end verification of data representation, preprocessing, and transmission
+pipelines.
+Only by enforcing such comprehensive validation procedures can experimental
+results be considered reliable, reproducible, and scientifically sound.
 
 \chapter{Performance Evaluation}
 
-This chapter presents a quantitative evaluation of the proposed UART-based DNN
-microserver, focusing on execution time, communication latency, and overall
-end-to-end performance.
-All measurements are obtained on the Zybo Z7 platform using the methodology
-described in Chapter~6 and are based on cycle-accurate timing derived from the ARM
-Global Timer.
+This chapter presents a quantitative performance evaluation of the proposed
+UART-based DNN microserver, with a specific focus on execution time, communication
+latency, and overall end-to-end performance.
+All measurements are conducted on the Zybo Z7 platform using the methodology
+described in Chapter~6 and rely on cycle-accurate timing obtained through the
+ARM Cortex-A9 Global Timer.
 
 Performance is evaluated under three fixed-point configurations:
-(i) a baseline configuration using Q8.8 input data and parameters,
-(ii) an optimized configuration employing compact Q0.8 UART input streaming
-(Tip~1),
-and (iii) a combined optimized configuration using Q0.8 input data and reduced
-Q1.7 weights and biases (Tip~1 + Tip~2).
+(i) a baseline configuration using Q8.8 fixed-point representation for both input
+data and network parameters;
+(ii) an optimized configuration employing compact Q0.8 input data transmission
+over UART (Tip~1);
+and (iii) a combined optimized configuration using Q0.8 input data together with
+Q1.7 fixed-point representation for weights and biases (Tip~1 + Tip~2).
 
-For each configuration, execution time is decomposed into communication time,
-inference time, and output overhead, enabling a detailed analysis of performance
-bottlenecks and optimization effectiveness.
-All reported measurements refer to steady-state execution conditions, with warm-up
-iterations discarded as discussed in Chapter~6.
+For each configuration, the total iteration time is decomposed into three
+components: UART input reception time, DNN inference execution time, and output
+printing overhead.
+This decomposition enables a precise identification of performance bottlenecks
+and a clear assessment of the effectiveness of the proposed optimizations.
+All reported results refer to steady-state execution conditions, with initial
+warm-up iterations discarded, as discussed in Chapter~6.
 
 \begin{table}[H]
 \centering
@@ -1085,181 +1349,213 @@ iterations discarded as discussed in Chapter~6.
 \hline
 \textbf{Configuration} & \textbf{RX [µs]} & \textbf{DNN [µs]} & \textbf{PRINT [µs]} & \textbf{ITER [µs]} \\
 \hline
-Baseline (Q8.8) & 5\,064\,059 & 2\,988 & 18 & 5\,067\,065 \\
-Tip~1 (Q0.8) & 3\,486\,914 & 2\,988 & 18 & 3\,489\,920 \\
-Tip~1 + Tip~2 (Q1.7) & 3\,690\,949 & 2\,988 & 18 & 3\,693\,955 \\
+Baseline (Q8.8)        & 5\,064\,059 & 2\,988 & 18 & 5\,067\,065 \\
+Tip~1 (Q0.8)           & 3\,486\,914 & 2\,988 & 18 & 3\,489\,920 \\
+Tip~1 + Tip~2 (Q1.7)   & 3\,690\,949 & 2\,988 & 18 & 3\,693\,955 \\
 \hline
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:perf_summary} summarizes the average execution time breakdown
-measured under the different fixed-point configurations.
+Table~\ref{tab:perf_summary} reports the average execution time breakdown measured
+under the considered fixed-point configurations.
 
-The experimental results clearly show that UART communication dominates the
-overall execution time in all configurations.
+The numerical values reported in Table~\ref{tab:perf_summary} are obtained by
+averaging multiple iterations of the real-time inference loop executed on the
+embedded platform.
+All measurements are derived from cycle-accurate timing data collected at runtime
+and printed via the serial interface.
+
+A representative excerpt of the raw runtime output, including functional
+validation results and detailed timing measurements for each configuration, is
+reported in Appendix~\ref{sec:appendix_results_log}.
+This appendix provides full traceability between the measured execution times
+presented in this chapter and the corresponding low-level serial output generated
+by the embedded application.
+
+
+The results clearly show that UART communication dominates the overall execution
+time in all configurations.
 In the baseline setup, more than 99\% of the end-to-end latency is attributable to
-input reception, while DNN inference accounts for less than 0.1\% of the total
-iteration time.
-
-This highlights that the computational workload of the fixed-point DNN is
-negligible compared to the cost of serial data transfer over UART.
+input data reception, whereas DNN inference accounts for less than 0.1\% of the
+total iteration time.
+This confirms that the computational workload of the fixed-point DNN is negligible
+when compared to the cost of serial data transfer over a low-bandwidth UART
+interface.
 
 The adoption of compact Q0.8 input streaming (Tip~1) significantly reduces UART
-latency, achieving an average UART reception time reduction of approximately 31\% with
-respect to the baseline configuration.
-
-This improvement directly translates into a proportional reduction of the total
-iteration time, confirming that the system is communication-bound.
+reception time, achieving an average reduction of approximately 31\% with respect
+to the baseline configuration.
+As a direct consequence, the total iteration time is reduced by a comparable
+amount, confirming that the system operates in a communication-bound regime.
 
 In contrast, the use of reduced-precision Q1.7 weights and biases (Tip~2) does not
-affect inference execution time, as the computational structure and number of
-multiply--accumulate operations remain unchanged.
-
-
+affect inference execution time.
+This behavior is expected, as the computational structure of the network and the
+number of multiply--accumulate operations remain unchanged.
+The observed performance impact of Tip~2 is therefore limited to numerical
+robustness, rather than execution speed, and will be discussed further in the
+context of accuracy and stability considerations.
 
 \section{Compute-Only Throughput}
 
-To evaluate the intrinsic computational efficiency of the DNN implementation,
-a compute-only throughput metric is adopted.
-This metric is obtained by excluding the time required for UART-based data
-reception and considering only the execution time of the neural network
-inference itself.
+To evaluate the intrinsic computational efficiency of the proposed DNN
+implementation, a compute-only throughput metric is considered.
+This metric isolates the execution time of the neural network inference by
+explicitly excluding the latency associated with UART-based input reception and
+output transmission.
 
-By isolating computation from communication, it is possible to assess the
+By decoupling computation from communication, it is possible to assess the
 processing capabilities of the ARM Cortex-A9 independently of external I/O
 constraints.
 Compute-only throughput is expressed in terms of processed images per second
-(img/s) and is computed as the inverse of the measured DNN inference time.
+(img/s) and is computed as the inverse of the measured DNN inference execution
+time.
 
-Experimental results show that the inference pipeline executes in approximately
-a few milliseconds per image, corresponding to a throughput on the order of
-several hundred images per second.
-These values remain highly stable across repeated executions, confirming the
-deterministic behavior of the fixed-point implementation and the absence of
-data-dependent execution time variations.
+Experimental measurements show that the inference pipeline executes in
+approximately $3\,\mathrm{ms}$ per image, corresponding to a compute-only
+throughput of roughly $330$ images per second.
+This value remains highly stable across repeated executions and across the
+considered fixed-point configurations, confirming the deterministic behavior of
+the fixed-point implementation and the absence of data-dependent execution time
+variations.
 
-This result demonstrates that the computational workload imposed by the
+The observed stability of the inference execution time confirms that the
+implemented workload behaves as a regular RISC-style kernel, with predictable
+instruction scheduling and minimal control-flow variability, as expected from
+the MIPS execution model.
+
+
+These results demonstrate that the computational workload imposed by the
 considered DNN topology is well within the processing capabilities of the target
-embedded platform, leaving substantial computational headroom for potential
-extensions such as deeper networks or additional processing stages.
+embedded platform.
+In particular, inference computation represents a negligible fraction of the
+overall iteration time, indicating that the system is fundamentally
+communication-bound.
+The available computational headroom could therefore be exploited to support
+more complex network topologies or additional processing stages without
+compromising real-time execution constraints.
 
 \section{Real-Time Capability Analysis}
 
-The real-time capability of the system is evaluated by comparing the execution
-time of the DNN inference with the time required to acquire an input image via
-UART.
-Experimental measurements show that the inference time is orders of magnitude
-smaller than the communication latency associated with serial data transfer.
+The real-time capability of the proposed system is evaluated by comparing the
+execution time of the DNN inference with the time required to acquire a complete
+input image via UART.
+Experimental measurements show that the inference execution time is orders of
+magnitude smaller than the communication latency associated with serial data
+transfer.
 
-As a consequence, each image is fully processed well within the time window
+As a consequence, each input image is fully processed well within the time window
 defined by the arrival of the next input sample.
-The inference pipeline therefore does not introduce any backlog or data loss
-when images are streamed sequentially from the host computer.
+This results in a large positive slack time between consecutive inference tasks,
+ensuring that the inference pipeline does not introduce backlog, queue
+accumulation, or data loss when images are streamed sequentially from the host
+computer.
 
-This observation confirms that the proposed implementation satisfies real-time
-requirements under the considered operating conditions.
-In particular, the system operates in a communication-bound regime, where
-overall throughput is limited by UART bandwidth rather than by computational
-performance.
+Under the considered operating conditions, the system therefore satisfies
+real-time requirements in a deterministic and repeatable manner.
+The observed behavior confirms that the implementation operates in a
+communication-bound regime, in which overall system throughput is limited by UART
+bandwidth rather than by computational performance of the ARM Cortex-A9.
 
-Figure~\ref{fig:throughput} illustrates the measured throughput and clearly
-highlights the separation between communication-dominated and
-computation-dominated phases of the execution.
+Figure~\ref{fig:throughput} illustrates the measured compute-only throughput and
+highlights the clear separation between communication-dominated and
+computation-dominated phases of execution.
+The large gap between these two contributions visually confirms that real-time
+constraints are met with significant timing margins.
+
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=1\textwidth]{images/lab5_Throughput.png}
-    \caption{Measured compute-only throughput and real-time capability.}
+    \caption{Measured compute-only throughput and real-time capability of the
+    proposed DNN inference system. The figure highlights the dominance of UART
+    communication latency over inference execution time.}
     \label{fig:throughput}
 \end{figure}
 
 
-At the same time, it confirms that the adopted fixed-point DNN implementation is
-efficient, predictable, and suitable for real-time embedded deployment.
-
 \section{Baseline Performance Results}
 
-These values were obtained from repeated executions of the real-time inference loop,
-measured using the ARM Global Timer and collected through UART debug output.
+Baseline performance results were obtained from repeated executions of the
+real-time inference loop, measured using the ARM Cortex-A9 Global Timer and
+collected through UART debug output.
 
-Across multiple iterations, the measured inference time remained highly stable
-(2.98–2.99\,ms), confirming deterministic behavior under steady-state conditions.
-This stability is a direct consequence of the standalone execution model, the
-exclusive use of fixed-point arithmetic, and the absence of operating system
-interference.
+Across multiple iterations, the measured inference execution time remained highly
+stable, ranging between $2.98$ and $2.99\,\mathrm{ms}$.
+This limited variability confirms the deterministic behavior of the system under
+steady-state conditions and is a direct consequence of the standalone execution
+model, the exclusive use of fixed-point arithmetic, and the absence of operating
+system interference.
 
-Per-layer profiling highlights that the first fully connected layer (784→64)
-dominates the computational cost, accounting for more than 94\% of the total
-inference time.
-This result is consistent with the expected workload distribution in dense neural
-networks, where the largest matrix--vector multiplication typically represents the
-primary computational bottleneck.
+Per-layer profiling shows that the first fully connected layer
+($784 \rightarrow 64$) dominates the computational workload, accounting for more
+than $94\%$ of the total inference time.
+This result is consistent with the expected workload distribution of dense neural
+networks, in which the largest matrix--vector multiplication typically represents
+the primary computational bottleneck.
 
-In contrast, UART-based image reception requires between 2.0 and 3.4 seconds per
-image, depending on transmission conditions.
-As a result, overall system performance in the baseline configuration is strongly
-communication-bound, while the inference pipeline itself easily satisfies real-time
-constraints.
+In contrast, UART-based input image reception requires between $2.0$ and
+$3.4\,\mathrm{s}$ per image in the baseline configuration, depending on transmission
+conditions.
+As a result, overall system performance is strongly communication-bound, while the
+inference pipeline itself easily satisfies real-time execution constraints.
 
 Measured UART reception times are therefore approximately three orders of magnitude
-larger than the corresponding inference time, resulting in a
+larger than the corresponding inference execution time, resulting in a
 communication-to-computation ratio on the order of $10^3$.
 This clearly indicates that system throughput is limited by serial communication
-bandwidth rather than by the computational performance of the DNN inference pipeline.
+bandwidth rather than by the computational performance of the DNN inference
+pipeline.
 
-From a system-level perspective, these results demonstrate that the proposed
-software-based implementation not only satisfies real-time requirements, but also
-leaves significant computational headroom for more complex network topologies or
-additional processing stages.
-
-All results presented in this section refer to the baseline configuration, with
-Q8.8 input data and Q8.8 weights and biases, and without communication-oriented
-optimizations enabled.
-
-
+All results presented in this section refer to the baseline configuration, using
+Q8.8 fixed-point representation for both input data and network parameters, and
+without communication-oriented optimizations enabled.
 \section{Performance Results with Optimization Tips Enabled}
 
-This section presents the performance evaluation of the optimized configuration,
-in which the laboratory optimization tips are enabled.
-In particular, two enhancements are considered:
-(i) compact input data transmission using a Q0.8 format, and
-(ii) alternative fixed-point representation for weights and biases using Q1.7.
+This section presents the performance evaluation of the optimized system
+configuration, in which the laboratory optimization tips are enabled.
+Specifically, two enhancements are considered:
+(i) compact input data transmission using a Q0.8 fixed-point format (Tip~1), and
+(ii) an alternative fixed-point representation for weights and biases using Q1.7
+(Tip~2).
 
 The objective of this evaluation is to quantify the impact of these optimizations
 on communication latency, numerical robustness, and overall system behavior,
-while preserving functional correctness and real-time capability.
+while preserving functional correctness, deterministic execution, and real-time
+capability.
 
 \subsection{Compute Performance}
 
-When the optimization tips are enabled, the internal structure of the DNN inference
-pipeline remains unchanged.
+When the optimization tips are enabled, the internal computational structure of
+the DNN inference pipeline remains unchanged.
+In particular, the number of layers, matrix--vector operations, and
+multiply--accumulate instructions executed per inference are identical to those
+of the baseline configuration.
+
 As a consequence, the compute-only execution time of the network is expected to
-remain comparable to that of the baseline configuration.
+remain comparable to the baseline case.
+Experimental measurements confirm this expectation: the inference execution time
+remains approximately constant at around $3\,\mathrm{ms}$ per image, corresponding
+to a compute-only throughput in the range of $330$--$340$ images per second.
 
-Experimental measurements confirm this expectation.
-The execution time of the DNN inference remains approximately constant at around
-3\,ms per image, corresponding to a compute-only throughput in the range of
-330–340 images per second.
-This result demonstrates that the adopted optimizations do not introduce additional
-computational overhead and preserve the deterministic execution behavior observed
-in the baseline case.
-
-The stability of the measured inference time across multiple iterations further
-confirms that the use of alternative Q-formats does not negatively affect timing
-predictability or execution determinism.
+The observed stability of the inference time across multiple iterations further
+confirms that the adopted optimizations do not introduce additional computational
+overhead and preserve the deterministic execution behavior of the fixed-point
+implementation.
 
 \subsection{Impact on Communication Latency}
 
 The primary performance benefit of the optimized configuration is observed at the
 communication level.
-By transmitting input images using a Q0.8 representation, each pixel is encoded
-using a single byte instead of two, effectively reducing the amount of data sent
-over UART by approximately 50\%.
+By transmitting input images using a compact Q0.8 representation, each pixel is
+encoded using a single byte instead of two, effectively reducing the amount of data
+transferred over the UART interface by approximately $50\%$.
 
-As a result, the time required to receive a full MNIST image is significantly
+As a result, the time required to receive a complete MNIST image is significantly
 reduced compared to the baseline configuration.
-Although the system remains communication-bound, the reduced reception time
-improves overall responsiveness and increases the maximum sustainable input rate.
+Although the system remains communication-bound, the reduced reception latency
+directly improves overall responsiveness and increases the maximum sustainable
+input rate.
 
 This optimization directly targets the dominant bottleneck identified in the
 baseline analysis, namely UART-based data transfer, and therefore represents a
@@ -1267,20 +1563,21 @@ system-level optimization rather than a purely computational one.
 
 \subsection{Numerical Robustness and Stability}
 
-The use of a Q1.7 fixed-point format for weights and biases increases the dynamic
-range available during accumulation in fully connected layers.
-This reduces the risk of saturation effects, particularly in deeper network
+The adoption of a Q1.7 fixed-point format for weights and biases increases the
+dynamic range available during accumulation in fully connected layers.
+This reduces the likelihood of saturation effects, particularly in deeper network
 configurations such as the custom Group~4 topology.
 
-Experimental validation confirms that classification accuracy and functional
-correctness are preserved under the optimized configuration.
+Experimental validation confirms that functional correctness and classification
+behavior are preserved under the optimized configuration.
 No instability or anomalous behavior was observed during extended execution,
 demonstrating that the alternative fixed-point representation is fully compatible
-with the implemented inference pipeline.
+with the implemented inference pipeline and does not compromise numerical
+stability.
 
 \subsection{Discussion on Optimized Configuration}
 
-The performance evaluation with optimization tips enabled highlights an important
+The performance evaluation with optimization tips enabled highlights a key
 system-level insight.
 While computational performance remains essentially unchanged, communication
 efficiency and numerical robustness are significantly improved.
@@ -1288,8 +1585,10 @@ efficiency and numerical robustness are significantly improved.
 These results confirm that, in embedded DNN microserver applications, effective
 optimization strategies often target data representation and communication
 mechanisms rather than raw computational acceleration.
-The optimized configuration therefore provides a more balanced and robust system
-design, while fully satisfying real-time requirements.
+The optimized configuration therefore yields a more balanced and robust system
+design, while fully satisfying real-time requirements and preserving deterministic
+execution behavior.
+
 
 \section{Overall Discussion}
 
@@ -1317,55 +1616,102 @@ Overall, the obtained results validate the design choices adopted in this work a
 demonstrate that careful software design, combined with measurement-driven analysis,
 enables efficient and scalable deployment of Deep Neural Network inference on
 resource-constrained embedded platforms.
+To summarize the key findings of the performance evaluation and their implications
+from a system design perspective, Table~\ref{tab:design_implications} reports a
+compact mapping between experimental observations and the corresponding design
+choices and conclusions.
+\begin{table}[H]
+\centering
+\caption{Summary of performance results and corresponding design implications}
+\label{tab:design_implications}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{|p{3.8cm}|p{4.6cm}|p{5.4cm}|}
+\hline
+\textbf{Observed Result} & \textbf{Experimental Evidence} & \textbf{Design Implication} \\
+\hline
+Inference execution time is stable and deterministic &
+Measured inference time of $\approx 3\,\mathrm{ms}$ with negligible variance across iterations &
+Fixed-point, software-only DNN inference is suitable for real-time embedded execution without OS support \\
+\hline
+Computation is not the system bottleneck &
+Inference time is three orders of magnitude smaller than UART reception time &
+System performance is communication-bound; computational acceleration would provide limited benefits \\
+\hline
+UART communication dominates end-to-end latency &
+UART input reception accounts for more than $99\%$ of total iteration time in baseline configuration &
+Optimization efforts should primarily target data representation and communication bandwidth \\
+\hline
+Compact input representation reduces latency &
+Q0.8 input streaming reduces UART reception time by $\approx 31\%$ &
+Communication-oriented optimizations yield significant system-level performance gains \\
+\hline
+Reduced-precision parameters preserve correctness &
+Q1.7 weights and biases do not affect inference time or classification behavior &
+Alternative fixed-point formats can improve numerical robustness without compromising timing predictability \\
+\hline
+Optimizations preserve real-time capability &
+Inference always completes within the inter-arrival time of input samples &
+System satisfies real-time requirements with significant timing margins \\
+\hline
+\end{tabular}
+\end{table}
 
 
 \chapter{Conclusions}
 
 This work demonstrates that a fully software-based Deep Neural Network can achieve
-real-time MNIST classification on an embedded ARM Cortex-A9 platform when fixed-point
-arithmetic and careful system-level design are employed.
+real-time handwritten digit classification on an embedded ARM Cortex-A9 platform
+when fixed-point arithmetic and careful system-level design principles are applied.
+The results confirm that, even in the absence of hardware accelerators or dedicated
+neural processing units, efficient and deterministic DNN inference is feasible on
+general-purpose embedded processors.
 
-Starting from the analysis of the DNN architecture using ONNX models and the Netron
-visualization tool, the inference pipeline was manually mapped onto an embedded
-processing system.
-This process emphasized explicit control over data representation, memory
-organization, and execution flow, which are key aspects in the deployment of AI
-workloads on resource-constrained platforms.
+Starting from the analysis of the network architecture using ONNX models and the
+Netron visualization tool, the inference pipeline was manually mapped onto the
+embedded processing system.
+This process required explicit control over data representation, memory layout,
+and execution flow, emphasizing key aspects that are often abstracted away in
+high-level AI frameworks but become critical in resource-constrained embedded
+environments.
 
 The adoption of fixed-point arithmetic enabled the complete elimination of
-floating-point operations, ensuring deterministic execution behavior and reducing
-computational overhead.
-This design choice proved particularly effective in a standalone execution
-environment, where predictable timing and low-level control are essential for
-accurate performance evaluation.
+floating-point operations, ensuring deterministic execution behavior and predictable
+timing characteristics.
+This design choice proved particularly effective in a standalone execution model,
+where low-level control and timing repeatability are essential for accurate
+performance characterization and real-time validation.
 
-The implementation of a UART-based DNN microserver enabled a realistic assessment
+The implementation of a UART-based DNN microserver enabled a realistic evaluation
 of inference under communication constraints.
 Experimental results clearly showed that, in the considered configuration, the
-execution time of the DNN inference is orders of magnitude smaller than the
-communication latency associated with UART-based image streaming.
-As a result, the system operates in a communication-bound regime, while the
-inference pipeline itself fully satisfies real-time requirements.
+execution time of the DNN inference is orders of magnitude smaller than the latency
+introduced by UART-based image transmission.
+As a consequence, the system operates in a communication-bound regime, while the
+inference pipeline itself fully satisfies real-time execution requirements with
+large timing margins.
 
-Cycle-accurate execution time measurements performed using the ARM Global Timer
-provided detailed insight into the contribution of each processing stage.
-Per-layer profiling highlighted the dominance of fully connected layers in the
-computational workload and confirmed the effectiveness of the adopted measurement
-methodology and optimization strategies.
+Cycle-accurate measurements obtained using the ARM Global Timer provided detailed
+insight into the contribution of each processing stage.
+Per-layer profiling confirmed that the first fully connected layer dominates the
+computational workload, in line with theoretical expectations for dense neural
+networks, and validated the effectiveness of the adopted measurement methodology.
 
-Additional enhancements, including compact input data representation and alternative
-fixed-point formats for network parameters, further improved communication efficiency
-and numerical robustness without requiring changes to the core inference algorithm.
-The successful extension to a custom Group~4 network topology demonstrated the
-scalability and modularity of the proposed software framework.
+Additional system-level optimizations, including compact input data representation
+and alternative fixed-point formats for network parameters, further improved
+communication efficiency and numerical robustness without modifying the core
+inference algorithm.
+The successful extension of the implementation to a custom Group~4 network topology
+demonstrated the scalability, modularity, and reusability of the proposed software
+framework.
 
 Overall, this laboratory activity illustrates how Deep Neural Network inference can
 be effectively deployed on a general-purpose embedded processor through careful
-software design and measurement-driven optimization.
-The results highlight the importance of system-level analysis when integrating AI
-techniques into embedded platforms and provide a solid foundation for further
-exploration of hardware--software co-design solutions.
-
+software design, deterministic execution models, and measurement-driven
+optimization.
+The presented results highlight the importance of system-level analysis when
+integrating AI workloads into embedded platforms and provide a solid foundation
+for future investigations on hardware--software co-design and performance-aware
+AI deployment in resource-constrained systems.
 
 \chapter{Appendix – Preprocessing Tools and Optimization Scripts}
 \label{chap:appendix}
@@ -1977,6 +2323,386 @@ for i in range(10):
     print()
 
 \end{lstlisting}
+
+\section{Runtime Output Log of Experimental Results}
+\label{sec:appendix_results_log}
+
+This section reports an excerpt of the runtime output log (\texttt{results.txt})
+generated during the experimental evaluation of the UART-based DNN microserver.
+The log was captured directly from the serial console during execution on the
+Zybo Z7 platform and reflects the real-time behavior of the embedded application
+under different fixed-point configurations.
+
+The reported output includes:
+(i) the active fixed-point configuration,
+(ii) functional validation on statically linked MNIST test images,
+and (iii) cycle-accurate timing measurements for UART reception, DNN inference,
+and total iteration time.
+The log therefore provides a complete and transparent trace of both functional
+correctness and performance measurements discussed in Chapters~6 and~9.
+
+The excerpt below shows representative outputs for:
+\begin{itemize}
+    \item the baseline configuration (Q8.8 input and parameters),
+    \item the UART-optimized configuration (Tip~1, Q0.8 input),
+    \item the combined optimized configuration (Tip~1 + Tip~2, Q0.8 input and Q1.7 parameters).
+\end{itemize}
+
+\begin{lstlisting}[
+basicstyle=\ttfamily\footnotesize,
+frame=single,
+breaklines=true,
+caption={Excerpt from \texttt{results.txt}: runtime serial output for baseline, Tip~1, and Tip~1+Tip~2 configurations.},
+label={lst:results_txt}
+]
+
+
+Started
+
+
+=== LAB5 === DNN on MNIST===
+
+
+=== GROUP 4 CUSTOM DNN on MNIST===
+
+
+----------------------------------------
+ Fixed-Point Configuration
+----------------------------------------
+ Mode        : BASELINE
+ Input       : Q8.8  (2 bytes / pixel)
+ Weights     : Q8.8
+ Bias        : Q8.8
+ Internal QF : 8
+----------------------------------------
+
+
+===== Test image 0 =====
+Expected = 0, Predicted = 0
+
+===== Test image 1 =====
+Expected = 1, Predicted = 1
+
+===== Test image 2 =====
+Expected = 2, Predicted = 2
+
+===== Test image 3 =====
+Expected = 3, Predicted = 3
+
+===== Test image 4 =====
+Expected = 4, Predicted = 4
+
+===== Test image 5 =====
+Expected = 5, Predicted = 3
+
+===== Test image 6 =====
+Expected = 6, Predicted = 6
+
+===== Test image 7 =====
+Expected = 7, Predicted = 7
+
+===== Test image 8 =====
+Expected = 8, Predicted = 8
+
+===== Test image 9 =====
+Expected = 9, Predicted = 9
+
+Waiting for image...
+Predicted digit = 0
+
+TIMING us: RX=21890175 DNN=2989 PRINT=18 ITER=21893183
+
+
+Waiting for image...
+Predicted digit = 1
+
+TIMING us: RX=3964751 DNN=2988 PRINT=18 ITER=3967758
+
+
+Waiting for image...
+Predicted digit = 2
+
+TIMING us: RX=5100474 DNN=2988 PRINT=17 ITER=5103480
+
+
+Waiting for image...
+Predicted digit = 3
+
+TIMING us: RX=3776143 DNN=2988 PRINT=17 ITER=3779150
+
+
+Waiting for image...
+Predicted digit = 4
+
+TIMING us: RX=4370541 DNN=2989 PRINT=18 ITER=4373549
+
+
+Waiting for image...
+Predicted digit = 3
+
+TIMING us: RX=5415004 DNN=2988 PRINT=17 ITER=5418010
+
+
+Waiting for image...
+Predicted digit = 6
+
+TIMING us: RX=8484352 DNN=2988 PRINT=18 ITER=8487359
+
+
+Waiting for image...
+Predicted digit = 7
+
+TIMING us: RX=4469596 DNN=2988 PRINT=18 ITER=4472603
+
+
+Waiting for image...
+Predicted digit = 8
+
+TIMING us: RX=3300936 DNN=2988 PRINT=18 ITER=3303943
+
+
+Waiting for image...
+Predicted digit = 9
+
+TIMING us: RX=3577633 DNN=2988 PRINT=19 ITER=3580641
+
+
+Waiting for image...
+
+
+Started
+
+
+=== LAB5 === DNN on MNIST===
+
+
+=== GROUP 4 CUSTOM DNN on MNIST===
+
+
+----------------------------------------
+ Fixed-Point Configuration
+----------------------------------------
+ Mode        : TIP 1 (UART optimization)
+ Input       : Q0.8  (1 byte / pixel)
+ Weights     : Q8.8
+ Bias        : Q8.8
+ Internal QF : 8
+----------------------------------------
+
+
+===== Test image 0 =====
+Expected = 0, Predicted = 0
+
+===== Test image 1 =====
+Expected = 1, Predicted = 1
+
+===== Test image 2 =====
+Expected = 2, Predicted = 2
+
+===== Test image 3 =====
+Expected = 3, Predicted = 3
+
+===== Test image 4 =====
+Expected = 4, Predicted = 4
+
+===== Test image 5 =====
+Expected = 5, Predicted = 3
+
+===== Test image 6 =====
+Expected = 6, Predicted = 6
+
+===== Test image 7 =====
+Expected = 7, Predicted = 7
+
+===== Test image 8 =====
+Expected = 8, Predicted = 8
+
+===== Test image 9 =====
+Expected = 9, Predicted = 9
+
+Waiting for image...
+Predicted digit = 0
+
+TIMING us: RX=11948640 DNN=2989 PRINT=18 ITER=11951648
+
+
+Waiting for image...
+Predicted digit = 1
+
+TIMING us: RX=3431864 DNN=2988 PRINT=18 ITER=3434871
+
+
+Waiting for image...
+Predicted digit = 2
+
+TIMING us: RX=3197234 DNN=2988 PRINT=17 ITER=3200241
+
+
+Waiting for image...
+Predicted digit = 3
+
+TIMING us: RX=2947756 DNN=2988 PRINT=17 ITER=2950763
+
+
+Waiting for image...
+Predicted digit = 4
+
+TIMING us: RX=3132731 DNN=2988 PRINT=18 ITER=3135738
+
+
+Waiting for image...
+Predicted digit = 3
+
+TIMING us: RX=3086343 DNN=2989 PRINT=18 ITER=3089350
+
+
+Waiting for image...
+Predicted digit = 6
+
+TIMING us: RX=3306767 DNN=2989 PRINT=18 ITER=3309775
+
+
+Waiting for image...
+Predicted digit = 7
+
+TIMING us: RX=3179996 DNN=2989 PRINT=18 ITER=3183004
+
+
+Waiting for image...
+Predicted digit = 8
+
+TIMING us: RX=3462245 DNN=2989 PRINT=18 ITER=3465253
+
+
+Waiting for image...
+Predicted digit = 9
+
+TIMING us: RX=2916565 DNN=2988 PRINT=19 ITER=2919573
+
+
+Waiting for image...
+
+
+Started
+
+
+=== LAB5 === DNN on MNIST===
+
+
+=== GROUP 4 CUSTOM DNN on MNIST===
+
+
+----------------------------------------
+ Fixed-Point Configuration
+----------------------------------------
+ Mode        : TIP 1 + TIP 2
+ Input       : Q0.8  (1 byte / pixel)
+ Weights     : Q1.7
+ Bias        : Q1.7
+ Internal QF : 7
+----------------------------------------
+
+
+===== Test image 0 =====
+Expected = 0, Predicted = 5
+
+===== Test image 1 =====
+Expected = 1, Predicted = 1
+
+===== Test image 2 =====
+Expected = 2, Predicted = 2
+
+===== Test image 3 =====
+Expected = 3, Predicted = 5
+
+===== Test image 4 =====
+Expected = 4, Predicted = 4
+
+===== Test image 5 =====
+Expected = 5, Predicted = 5
+
+===== Test image 6 =====
+Expected = 6, Predicted = 6
+
+===== Test image 7 =====
+Expected = 7, Predicted = 7
+
+===== Test image 8 =====
+Expected = 8, Predicted = 5
+
+===== Test image 9 =====
+Expected = 9, Predicted = 9
+
+Waiting for image...
+Predicted digit = 0
+
+TIMING us: RX=11134470 DNN=2988 PRINT=18 ITER=11137478
+
+
+Waiting for image...
+Predicted digit = 1
+
+TIMING us: RX=6137062 DNN=2988 PRINT=19 ITER=6140070
+
+
+Waiting for image...
+Predicted digit = 2
+
+TIMING us: RX=2723557 DNN=2989 PRINT=18 ITER=2726564
+
+
+Waiting for image...
+Predicted digit = 3
+
+TIMING us: RX=3369838 DNN=2988 PRINT=18 ITER=3372845
+
+
+Waiting for image...
+Predicted digit = 4
+
+TIMING us: RX=3087430 DNN=2988 PRINT=19 ITER=3090437
+
+
+Waiting for image...
+Predicted digit = 0
+
+TIMING us: RX=3883511 DNN=2989 PRINT=17 ITER=3886518
+
+
+Waiting for image...
+Predicted digit = 6
+
+TIMING us: RX=3416225 DNN=2988 PRINT=18 ITER=3419231
+
+
+Waiting for image...
+Predicted digit = 7
+
+TIMING us: RX=3071311 DNN=2988 PRINT=18 ITER=3074319
+
+
+Waiting for image...
+Predicted digit = 8
+
+TIMING us: RX=2838059 DNN=2989 PRINT=18 ITER=2841066
+
+
+Waiting for image...
+Predicted digit = 9
+
+TIMING us: RX=3246022 DNN=2988 PRINT=19 ITER=3249031
+
+
+Waiting for image...
+
+\end{lstlisting}
+
+The complete \texttt{results.txt} file contains repeated iterations for all test
+images and configurations and was used to compute the average timing values
+reported in Chapter~9.
+The log also supports the validation and debugging analysis discussed in
+Chapter~8 by providing direct evidence of systematic misclassification and its
+resolution under controlled input conditions.
 
 
 \section{Reproducibility Notes}
