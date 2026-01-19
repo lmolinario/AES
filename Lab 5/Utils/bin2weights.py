@@ -111,7 +111,7 @@ def bin_to_define_q17(binfile, name, outfile, comment=None):
 # ================================================================
 # Header file generation
 # ================================================================
-with open("../weights_group4.h", "w") as out:
+with open("../group_4/weights_group4.h", "w") as out:
 
     # ------------------------------------------------------------
     # File header

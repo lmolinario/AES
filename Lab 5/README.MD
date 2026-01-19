@@ -285,12 +285,15 @@ Lab 5/
 │                                         • ONNX model
 │                                         • binary weights / biases
 │                                         • reference test images
+│                                         • weights_group4.h → Group 4 weights (Q8.8 / Q1.7)
 │
 ├── comparison_images/                  → Visual comparison and debugging material
 │                                         (original vs processed MNIST samples)
 │
 ├── mnist_from_uart-main/               → Reference UART sender tools
-│                                         (Python scripts and examples)
+│                                         • weights.h → Base network weights (Q8.8)
+│                                         • test_images.h → Embedded reference MNIST images
+│                                         • Mnist images, Python scripts and examples
 │
 ├── test/                               → Test images
 │
@@ -300,11 +303,8 @@ Lab 5/
 │   ├── tip1_q88_to_q08.py              → Q8.8 → Q0.8 image conversion (TIP1)
 │   └── verify_custom_dnn.py            → Python reference DNN verification
 │
-├── weights.h                           → Base network weights (Q8.8)
-├── weights_group4.h                    → Group 4 weights (Q8.8 / Q1.7)
-├── test_images.h                       → Embedded reference MNIST images
 │
-├── results.txt                         → Collected timing and accuracy results
+├── timing_accuracy_results.txt         → Collected timing and accuracy results
 ├── README.md                           → Lab documentation (this file)
 │
 ├── lab5_results.txt                    → brief text file optimizations result 
