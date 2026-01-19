@@ -389,7 +389,7 @@ Key observations:
 
 
 <p align="center">
-  <img src="../img/lab5/tip1%20e%20tip2%20stampa.png" alt="Output Example" width="480"/>
+  <img src="../img/lab5/tip1%20stampa.png" alt="Output Example" width="480"/>
 </p>
 
 
