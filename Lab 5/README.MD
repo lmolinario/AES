@@ -30,9 +30,10 @@ that:
    * a **custom network topology** (Group 4)
    * **UART and data-representation optimizations** (TIP 1, TIP 2)
 
-This lab introduces **embedded AI inference**, **fixed-point DNN implementation**,
-**UART microservers**, and **application-level performance profiling** without OS
-support.
+This laboratory activity (Lab 5) extends the timing and optimization methodologies introduced in Lab 3 and Lab 4 to a complete embedded Deep Neural Network (DNN) inference pipeline. While previous labs focused on isolated computational kernels (e.g., FIR filtering and parallel vector operations), this work addresses the integration of communication (UART), computation (DNN inference), and fine-grained performance profiling within a single embedded application.
+
+The system implements a UART-based DNN microserver for handwritten digit recognition (MNIST) on the Zybo Z7 platform. The entire inference pipeline runs as a standalone bare-metal application on the ARM Cortex-A9 Processing System, without relying on hardware accelerators or dedicated neural processing units. The adopted approach emphasizes explicit control over data representation, memory organization, and deterministic execution flow, in line with the objectives of the Advanced Embedded Systems course.
+
 ---
 
 ## **Hardware System**
@@ -48,6 +49,8 @@ The hardware platform (from previous labs) includes:
 
 The system runs **bare-metal**, without OS support, so all memory management and I/O handling must be implemented explicitly.
 All experiments were performed using a single core (CPU0), as required by the assignment.
+
+
 ---
 
 ## **Assignment Structure**
@@ -203,6 +206,20 @@ double seconds = (double)(t1 - t0) / COUNTS_PER_SECOND;
 
 The Global Timer runs at **CPU_clock/2 ≈ 333 MHz**.
 
+
+## **Execution-Time Measurement Methodology**
+
+All timing measurements are performed using the **ARM Cortex-A9 Global Timer**, accessed through the `XTime_GetTime()` API. On the Zybo Z7 platform, the Global Timer is clocked at **CPU_clock / 2 ≈ 333 MHz** and provides a free-running 64-bit hardware counter.
+
+Timing instrumentation is explicitly placed to measure the following execution phases independently:
+
+- **RX:** UART-based reception of the 784 MNIST pixels (blocking receive)
+- **DNN:** fixed-point DNN inference (all fully connected layers and activations)
+- **PRINT:** result processing and UART output
+- **ITER:** complete iteration time (RX + DNN + PRINT)
+
+UART transmissions and debug prints are intentionally excluded from the DNN timing window to avoid perturbing computation measurements. Since the application runs in a standalone bare-metal configuration with deterministic control flow and no dynamic memory allocation, execution times exhibit negligible variance and do not require warm-up iterations.
+
 ---
 
 # **Step 7 – Repeat for Your Custom Network**
@@ -210,7 +227,7 @@ The Global Timer runs at **CPU_clock/2 ≈ 333 MHz**.
 Based on your matricola:
 
 ️**group_number = matricola mod 5 = 4** --->
-I belong to **Group 4**
+This implementation corresponds to **Group 4**.
 
 Inside `aes_mnist_assigment_groups.zip`, open folder:
 
@@ -298,53 +315,69 @@ Lab 5/
 
 # **Step 8 – Custom Network with Optimization Tips (Q0.8 / Q1.7)**
 
-In aggiunta alla versione standard della rete personalizzata (file `lab5_mnist_custom.c`), è stata sviluppata una variante ottimizzata denominata **`lab5_mnist_custom+TIPS.c`**, che applica due ottimizzazioni suggerite dal documento *Tips and Tricks for Optimization* del docente.
+In addition to the standard version of the custom network (`lab5_mnist_custom.c`), an optimized variant named **`lab5_mnist_custom_TIPS.c`** has been developed. This version applies two optimizations suggested in the instructor-provided *Tips and Tricks for Optimization* document.
 
-L’obiettivo è ridurre il tempo di trasmissione via UART senza modificare il funzionamento interno della rete, che continua a operare in **formato Q8.8**.
+The goal is to reduce UART transmission time without modifying the internal behavior of the DNN, which continues to operate using the **Q8.8 fixed-point format**.
 
-### 🔹 TIP 1 — Ottimizzazione delle immagini (Q0.8 → Q8.8)
+### 🔹 TIP 1 — Image Optimization (Q0.8 → Q8.8)
 
-Le immagini MNIST presentano sempre un byte alto pari a `0x00`.  
-È quindi possibile trasmetterle come **1 byte (Q0.8)** invece di 2 byte (Q8.8).
 
-La board riconverte ogni pixel tramite:
+MNIST images always have a most significant byte equal to `0x00`.  
+Therefore, each pixel can be transmitted as **1 byte (Q0.8)** instead of 2 bytes (Q8.8).
+
+On the board side, each pixel is reconstructed as follows:
+
 
 ```c
 buffer[i] = ((short)px) << 8;   // Q0.8 → Q8.8
 ````
 
-**Risultato:**
-La trasmissione dell’immagine scende da 1568 B → 784 B (≈ 2× più veloce).
+**Result:**  
+Image transmission size is reduced from 1568 B to 784 B (≈ 2× faster).
+
 
 ---
 
-### 🔹 TIP 2 — Ottimizzazione dei pesi (Q1.7 → Q8.8)
+### 🔹 TIP 2 — Weight Optimizations  (Q1.7 → Q8.8)
 
-L'analisi dei pesi mostra che il byte più significativo è sempre `0x00` o `0xFF`, poiché la parte intera rappresenta solo il segno.
+Weight analysis shows that the most significant byte is always `0x00` or `0xFF`, since the integer part only represents the sign.
 
-I pesi possono quindi essere trasmessi come **singoli byte (Q1.7)** e riconvertiti in Q8.8 tramite:
+As a result, weights can be transmitted as **single bytes (Q1.7)** and reconstructed in Q8.8 as follows:
 
 ```c
 buffer[i] = ((short)w) << 1;   // Q1.7 → Q8.8
 ```
 
-**Risultato:**
-Riduzione del 50% della dimensione dei parametri trasmessi all’avvio.
+**Result:**  
+Image transmission size is reduced from 1568 B to 784 B (≈ 2× faster).
+
 
 ---
 
-### 🔹 Obiettivo della variante TIPS
+### 🔹 Tips goal
 
-Questa versione del codice:
+This optimized version of the code:
 
-* riduce la banda UART necessaria
-* mantiene invariata la precisione della rete (Q8.8)
-* non modifica la funzione FC né la logica della DNN
-* rappresenta un’implementazione **didattica, minimale e corretta** delle ottimizzazioni consigliate dal docente
+* reduces the required UART bandwidth
+* preserves the original network precision (Q8.8)
+* does not modify the FC function or the DNN computational logic
+* represents a **didactic, minimal, and correct** implementation of the instructor-recommended optimizations
 
-Il file finale è quindi pienamente compatibile con il laboratorio, ma più efficiente in fase di comunicazione.
+The resulting implementation remains fully compliant with the laboratory requirements while being more efficient during the communication phase.
 
 
+## **Observed Performance Results (Summary)**
+
+Experimental results show that end-to-end system performance is dominated by UART communication rather than by DNN computation.
+
+Key observations:
+
+- UART reception accounts for more than **99% of the total iteration time** in the baseline configuration.
+- Fixed-point DNN inference executes in approximately **3 ms per image**, corresponding to a compute-only throughput of about **330 images/s**.
+- **TIP 1** (Q0.8 input images) significantly reduces UART reception time by reducing the transmitted payload.
+- **TIP 2** does not affect runtime latency; its impact is limited to numerical representation and robustness.
+
+Overall, the system operates in a **communication-bound regime**, highlighting the importance of data movement optimization in embedded AI applications.
 
 
 
@@ -354,7 +387,7 @@ Il file finale è quindi pienamente compatibile con il laboratorio, ma più effi
 
 ### 🔹 DNN Inference
 
-* Fixed-point arithmetic (Q8 format)
+* Fixed-point arithmetic (Q8.8 base format)
 * Three FC layers, two ReLU
 * Manual memory buffers
 
@@ -382,9 +415,9 @@ Il file finale è quindi pienamente compatibile con il laboratorio, ma più effi
 ```
 Started
 Testing sample images…
-Image 0 → Predicted digit: 9
-Image 1 → Predicted digit: 3
-Image 2 → Predicted digit: 1
+Image 0 → Predicted digit: 0
+Image 1 → Predicted digit: 1
+Image 2 → Predicted digit: 2
 --------------------------------
 Waiting for the image…
 RESULT: 7
