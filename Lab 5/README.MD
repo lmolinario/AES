@@ -10,7 +10,9 @@ The application operates as a **UART-based microserver**, receiving MNIST images
 from a host PC, performing fixed-point inference, and returning the predicted
 digit, while measuring execution time using the **ARM Global Timer**.
 
+
 ---
+
 
 ## **Overview**
 
