@@ -296,6 +296,9 @@ Lab 5/
 │                                         • Mnist images, Python scripts and examples
 │
 ├── test/                               → Test images
+│                                         • Mnist images Q8.8 
+│                                         • Mnist images jpgs 
+│                                         • Mnist images Q0.8 
 │
 ├── utils/                              → Offline preprocessing and verification tools:
 │   ├── bin2weights.py                  → Binary → C header conversion
