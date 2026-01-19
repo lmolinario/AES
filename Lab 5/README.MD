@@ -55,11 +55,7 @@ All experiments were performed using a single core (CPU0), as required by the as
 
 ## **Assignment Structure**
 
-You must implement a complete MNIST inference pipeline, following the steps below.
-
----
-
-# **Step 1 – Analyze the DNN Topology**
+### **Step 1 – Analyze the DNN Topology**
 
 Open the provided ONNX model using:
 
@@ -87,7 +83,7 @@ Weights and biases are provided in:
 
 ---
 
-# **Step 2 – Implement Layer Functions**
+### **Step 2 – Implement Layer Functions**
 
 The template `app_template.c` provides:
 
@@ -112,7 +108,7 @@ FC_forward(out1_relu, out2, 32, 10, weights2, bias2, 8);
 
 ---
 
-# **Step 3 – Test on Pre-Loaded Sample Images**
+### **Step 3 – Test on Pre-Loaded Sample Images**
 
 Before handling UART input, test the network locally using:
 
@@ -130,7 +126,7 @@ This step ensures:
 
 ---
 
-# **Step 4 – Implement UART Input (Microserver Mode)**
+### **Step 4 – Implement UART Input (Microserver Mode)**
 
 The microserver must receive the 784 image pixels via UART as **signed 16-bit integers**.
 
@@ -159,7 +155,7 @@ You may use **RealTerm** (Windows) or the Linux script in the lab package to sen
 
 ---
 
-# **Step 5 – Implement the Classification Loop**
+### **Step 5 – Implement the Classification Loop**
 
 Create a cyclic loop performing:
 
@@ -185,7 +181,7 @@ while (1) {
 
 ---
 
-# **Step 6 – Measure Execution Time**
+### **Step 6 – Measure Execution Time**
 
 Use the Global Timer to measure:
 
@@ -207,7 +203,7 @@ double seconds = (double)(t1 - t0) / COUNTS_PER_SECOND;
 The Global Timer runs at **CPU_clock/2 ≈ 333 MHz**.
 
 
-## **Execution-Time Measurement Methodology**
+### **Execution-Time Measurement Methodology**
 
 All timing measurements are performed using the **ARM Cortex-A9 Global Timer**, accessed through the `XTime_GetTime()` API. On the Zybo Z7 platform, the Global Timer is clocked at **CPU_clock / 2 ≈ 333 MHz** and provides a free-running 64-bit hardware counter.
 
@@ -222,7 +218,7 @@ UART transmissions and debug prints are intentionally excluded from the DNN timi
 
 ---
 
-# **Step 7 – Repeat for Your Custom Network**
+### **Step 7 – Repeat for Your Custom Network**
 
 Based on your matricola:
 
@@ -317,13 +313,13 @@ Lab 5/
 
 
 
-# **Step 8 – Custom Network with Optimization Tips (Q0.8 / Q1.7)**
+### **Step 8 – Custom Network with Optimization Tips (Q0.8 / Q1.7)**
 
 In addition to the standard version of the custom network (`lab5_mnist_custom.c`), an optimized variant named **`lab5_mnist_custom_TIPS.c`** has been developed. This version applies two optimizations suggested in the instructor-provided *Tips and Tricks for Optimization* document.
 
 The goal is to reduce UART transmission time without modifying the internal behavior of the DNN, which continues to operate using the **Q8.8 fixed-point format**.
 
-### 🔹 TIP 1 — Image Optimization (Q0.8 → Q8.8)
+#### 🔹 TIP 1 — Image Optimization (Q0.8 → Q8.8)
 
 
 MNIST images always have a most significant byte equal to `0x00`.  
@@ -342,7 +338,7 @@ Image transmission size is reduced from 1568 B to 784 B (≈ 2× faster), signif
 
 ---
 
-### 🔹 TIP 2 — Weight Optimization (Q1.7 → Q8.8)
+#### 🔹 TIP 2 — Weight Optimization (Q1.7 → Q8.8)
 
 
 Weight analysis shows that the most significant byte is always `0x00` or `0xFF`, since the integer part only represents the sign.
@@ -360,7 +356,7 @@ A 50% reduction in the size of weights transmitted at system startup, with no im
 
 ---
 
-### 🔹 Optimization Goals
+#### 🔹 Optimization Goals
 
 
 This optimized version of the code:
