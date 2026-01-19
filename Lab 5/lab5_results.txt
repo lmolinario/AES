@@ -1,0 +1,134 @@
+REPORT – LAB 5
+DNN on MNIST – Advanced Embedded Systems
+
+This document provides a concise optimization report describing the main design
+choices and system-level optimizations introduced in Laboratory 5.
+The purpose of this report is to summarize the adopted optimization strategies
+in a clear and self-contained manner, without repeating the full architectural,
+validation, and experimental analysis discussed in the main laboratory report.
+
+The optimizations implemented in Laboratory 5 target two complementary aspects
+of the embedded DNN microserver:
+(1) reduction of communication overhead over a low-bandwidth UART interface, and
+(2) controlled fixed-point quantization of network parameters to improve numerical
+robustness while preserving deterministic execution behavior.
+
+All optimizations are designed to be non-intrusive with respect to the core DNN
+inference pipeline. They are applied either offline on the host PC or selected at
+compile time, ensuring that no additional runtime overhead, branching, or control
+flow variability is introduced during execution on the embedded platform.
+
+1. INPUT DATA OPTIMIZATION (TIP 1)
+
+The first optimization addresses the dominant system bottleneck identified in the
+baseline implementation, namely UART-based input data transmission.
+
+In the baseline configuration, MNIST input images are transmitted using a Q8.8
+fixed-point representation, where each pixel is encoded using two bytes. Since
+each image consists of 784 pixels, this results in a payload of 1568 bytes per
+image. Given the limited bandwidth of the UART interface, input reception time
+dominates the overall iteration latency, reaching several seconds per image and
+accounting for more than 99% of the total execution time.
+
+To reduce this communication overhead, a compact input streaming mode (Tip 1) is
+introduced. In this configuration, each pixel is transmitted using a Q0.8
+representation, encoded in a single byte. This optimization exploits the numerical
+properties of the MNIST dataset, whose pixel values are normalized in the range
+[0, 1) and therefore do not require an explicit integer part.
+
+The conversion from Q8.8 to Q0.8 is performed entirely offline using a dedicated
+Python preprocessing script. The script extracts the least significant byte of
+each pixel, applies defensive clipping to handle potential out-of-range values,
+and generates compact binary files suitable for UART transmission.
+
+On the embedded platform, Q0.8 input samples are deterministically realigned to the
+internal fixed-point format using simple shift operations. This reconstruction does
+not introduce any additional computational cost or control-flow complexity.
+
+As a result, Tip 1 reduces the UART payload size by approximately 50% and produces
+a significant reduction in input reception time, while preserving functional
+correctness, deterministic execution, and identical inference behavior.
+
+2. WEIGHT AND BIAS QUANTIZATION (TIP 2)
+
+The second optimization targets the representation of network parameters, namely
+weights and biases.
+
+In the baseline configuration, all parameters are represented using a Q8.8
+fixed-point format. While this representation provides adequate precision, it may
+limit numerical robustness in deeper network topologies and leads to a wider
+dynamic range during accumulation.
+
+To explore controlled precision–robustness trade-offs, an alternative Q1.7
+fixed-point representation is adopted for weights and biases (Tip 2). The
+conversion from Q8.8 to Q1.7 is performed entirely offline by applying an
+arithmetic right shift and explicit saturation to the signed 8-bit range
+[-128, 127].
+
+Although parameters are constrained offline to an 8-bit numerical domain, they
+are still stored and processed at runtime using 16-bit signed integers. This
+design choice preserves full compatibility with the existing fixed-point
+multiply–accumulate pipeline and avoids any modification to the core inference
+code.
+
+No runtime saturation, branching, or additional arithmetic is introduced as part
+of Tip 2. Consequently, inference execution time remains unchanged and fully
+deterministic. The impact of this optimization is limited to numerical behavior
+and robustness, rather than performance.
+
+Experimental validation confirms that Tip 2 does not affect runtime timing and
+preserves correct behavior when consistent input data is used. Observed
+misclassifications are attributable to input data inconsistencies rather than to
+the reduced-precision parameter representation.
+
+3. COMPILE-TIME CONFIGURABILITY AND DETERMINISM
+
+Both optimization tips are controlled exclusively through compile-time
+configuration flags. This approach ensures that:
+
+* execution paths remain identical across configurations,
+* no runtime branching or configuration-dependent control flow is introduced,
+* performance measurements reflect only data representation choices.
+
+The supported configurations include:
+
+* baseline configuration with Q8.8 input data and parameters,
+* input-optimized configuration with Q0.8 input streaming (Tip 1),
+* combined optimized configuration with Q0.8 input data and Q1.7 parameters
+  (Tip 1 + Tip 2).
+
+This design guarantees deterministic execution behavior and enables fair,
+reproducible performance comparison between different optimization modes.
+
+4. IMPACT ON SYSTEM PERFORMANCE
+
+Experimental results show that the proposed optimizations primarily affect
+communication latency rather than computational performance.
+
+Across all configurations, DNN inference time remains stable at approximately
+3 milliseconds per image, corresponding to a compute-only throughput of roughly
+330 images per second. This confirms that the inference workload is well within
+the processing capabilities of the ARM Cortex-A9 and exhibits deterministic
+execution behavior.
+
+In contrast, UART input reception time is significantly reduced when Tip 1 is
+enabled. The reduction in transferred data directly translates into a lower
+end-to-end iteration time, confirming that the system operates in a
+communication-bound regime.
+
+Tip 2 does not influence execution time, as the number of arithmetic operations
+and the instruction mix remain unchanged. Its effect is limited to numerical
+robustness and controlled precision trade-offs under offline validation.
+
+5. AVAILABILITY AND REPRODUCIBILITY
+
+The complete optimization report, together with source code, preprocessing
+scripts, runtime logs, and validation tools used in Laboratory 5, is publicly
+available at the following address:
+
+[https://github.com/lmolinario/AES](https://github.com/lmolinario/AES)
+
+The repository provides full traceability and reproducibility of the optimization
+workflow and serves as a compact reference for the design rationale,
+implementation approach, and measured impact of the proposed optimizations.
+

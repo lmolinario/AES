@@ -307,7 +307,8 @@ Lab 5/
 ├── results.txt                         → Collected timing and accuracy results
 ├── README.md                           → Lab documentation (this file)
 │
-└── Lab 5 Report.pdf                    → Final experimental report
+├── lab5_results.txt                    → brief text file optimizations result 
+└── Lab 5 Report.pdf                    → Final optimizations report
 
 ```
 
