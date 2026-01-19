@@ -368,9 +368,6 @@ This optimized version of the code:
 * reduces the required UART bandwidth
 * preserves the original network precision (Q8.8)
 * does not modify the FC function or the DNN computational logic
-* represents a **didactic, minimal, and correct** implementation of the instructor-recommended optimizations
-
-The resulting implementation remains fully compliant with the laboratory requirements while being more efficient during the communication phase.
 
 
 ## **Observed Performance Results (Summary)**
@@ -384,53 +381,17 @@ Key observations:
 - **TIP 1** (Q0.8 input images) significantly reduces UART reception time by reducing the transmitted payload.
 - **TIP 2** does not affect runtime latency; its impact is limited to numerical representation and robustness.
 
-Overall, the system operates in a **communication-bound regime**, highlighting the importance of data movement optimization in embedded AI applications.
-
-
 
 ---
 
-## **Implementation Summary**
-
-### 🔹 DNN Inference
-
-* Fixed-point arithmetic (Q8.8 base format)
-* Three FC layers, two ReLU
-* Manual memory buffers
-
-### 🔹 UART Microserver
-
-* Receive 784 × int16 pixels
-* Send classification result
-* Blocking UART I/O
-
-### 🔹 Performance Measurement
-
-* Use Global Timer
-* Evaluate layer-wise and end-to-end latency
-
-### 🔹 Custom Network
-
-* Replace topology with Group-4 architecture
-* Update buffer sizes
-* Reload weights and biases
-
----
 
 ## **Output Example**
 
-```
-Started
-Testing sample images…
-Image 0 → Predicted digit: 0
-Image 1 → Predicted digit: 1
-Image 2 → Predicted digit: 2
---------------------------------
-Waiting for the image…
-RESULT: 7
-Waiting for the image…
-RESULT: 2
-```
+
+<p align="center">
+  <img src="../img/lab5/tip1%20stampa.png" alt="Output Example" width="480"/>
+</p>
+
 
 
 ---
